@@ -3,12 +3,7 @@ export const DEFAULT_END = "2026-09-06";
 export const HOUR_MS = 60 * 60 * 1000;
 export const SHIFT_DAY_CUTOFF_HOUR = 8;
 
-export const sampleRows = [
-  { 地区: "njc", 姓名: "张三", 日期: "2026-08-31", 考勤时间: "2026-08-31 20:02, 2026-09-01 05:34" },
-  { 地区: "njc", 姓名: "张三", 日期: "2026-09-01", 考勤时间: "20:10 04:48" },
-  { 地区: "njc", 姓名: "李四", 日期: "2026-08-31", 考勤时间: "08:55, 18:26" },
-  { 地区: "njc", 姓名: "王五", 日期: "2026-09-03", 考勤时间: "2026/09/03 21:00; 2026/09/04 06:20" },
-];
+export const sampleRows = [];
 
 export const columnRules = {
   person: [/人员姓名/, /姓名/, /员工姓名/, /员工/, /人员/, /name/i, /person/i, /employee/i],
@@ -22,4 +17,3 @@ export const columnRules = {
   timesheet: [/timesheet/i, /班次/, /时段/],
   personId: [/person\s*id/i, /人员ID/i, /工号/],
 };
-

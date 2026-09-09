@@ -164,7 +164,7 @@ export function formatDuration(value) {
   const totalMinutes = Math.round(Number(value || 0) * 60);
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
-  return `${hours}小时${String(minutes).padStart(2, "0")}分钟`;
+  return `${hours}:${String(minutes).padStart(2, "0")}`;
 }
 
 export function formatRegionName(value) {

@@ -8,10 +8,10 @@ const { useEffect, useMemo, useState } = React;
 
 export function App() {
   const [rows, setRows] = useState(sampleRows);
-  const [columns, setColumns] = useState(Object.keys(sampleRows[0]));
-  const [fileName, setFileName] = useState("示例数据");
+  const [columns, setColumns] = useState(sampleRows[0] ? Object.keys(sampleRows[0]) : []);
+  const [fileName, setFileName] = useState("未上传文件");
   const [notice, setNotice] = useState("");
-  const [importInfo, setImportInfo] = useState("已加载示例数据");
+  const [importInfo, setImportInfo] = useState("");
   const [mode, setMode] = useState("week");
   const [selectedDate, setSelectedDate] = useState(DEFAULT_START);
   const [selectedShift, setSelectedShift] = useState("all");
@@ -29,6 +29,7 @@ export function App() {
     : dateRange;
   const activeRegion = selectedRegion || regionOptions[0] || siteName;
   const activeCompany = selectedCompany || companyOptions[0] || companyName;
+  const hasRows = rows.length > 0;
 
   const analysis = useMemo(
     () => analyzeRows(rows, guessed, {
@@ -98,7 +99,7 @@ export function App() {
       React.createElement(
         "div",
         { className: "title" },
-            React.createElement("h1", null, `${formatRegionName(activeRegion)} 考勤工时 Dashboard`),
+            React.createElement("h1", null, hasRows && activeRegion ? `${formatRegionName(activeRegion)} 考勤工时 Dashboard` : "考勤工时 Dashboard"),
         React.createElement("p", null, "按上传表日期统计，每天超过 8 小时的部分计入加班。")
       ),
       React.createElement(
@@ -118,7 +119,7 @@ export function App() {
       )
     ),
     notice ? React.createElement("div", { className: "notice" }, notice) : null,
-    React.createElement("div", { className: "autoStatus" }, importInfo, `。统计范围：${formatRegionName(activeRegion)} / ${activeRange.start} 至 ${activeRange.end}。劳务公司：${activeCompany}。班次：${formatShiftFilter(selectedShift)}。`),
+    hasRows ? React.createElement("div", { className: "autoStatus" }, importInfo, `。统计范围：${formatRegionName(activeRegion)} / ${activeRange.start} 至 ${activeRange.end}。劳务公司：${activeCompany}。班次：${formatShiftFilter(selectedShift)}。`) : null,
     !canAnalyze
       ? React.createElement(
           "section",
@@ -126,11 +127,13 @@ export function App() {
           React.createElement(
             "div",
             null,
-            React.createElement("h2", null, "没有匹配到可统计记录"),
+            React.createElement("h2", null, hasRows ? "没有匹配到可统计记录" : "请上传考勤表"),
             React.createElement(
               "p",
               null,
-              "请重新上传考勤表。我会自动扫描表头和列内容，支持完整时间戳、同一格里的开始/结束时间，以及分开的上班/下班打卡时间列。"
+              hasRows
+                ? "请重新上传考勤表。我会自动扫描表头和列内容，支持完整时间戳、同一格里的开始/结束时间，以及分开的上班/下班打卡时间列。"
+                : "上传后会自动识别地区、劳务公司、班次、上下班时间和休息时间，并生成工时统计。"
             )
           )
         )
@@ -155,4 +158,3 @@ export function App() {
         })
   );
 }
-
