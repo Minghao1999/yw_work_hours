@@ -408,7 +408,7 @@ select {
 
 .inlineBar {
   display: grid;
-  grid-template-columns: 48px minmax(80px, 1fr);
+  grid-template-columns: 92px minmax(80px, 1fr);
   align-items: center;
   gap: 8px;
 }
@@ -417,6 +417,7 @@ select {
   color: #273241;
   font-weight: 700;
   text-align: right;
+  white-space: nowrap;
 }
 
 .barTrack {

@@ -160,6 +160,13 @@ export function formatHours(value) {
   return number.toFixed(1).replace(/\.0$/, "");
 }
 
+export function formatDuration(value) {
+  const totalMinutes = Math.round(Number(value || 0) * 60);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${hours}小时${String(minutes).padStart(2, "0")}分钟`;
+}
+
 export function formatRegionName(value) {
   const text = clean(value);
   return /^[a-z]+$/i.test(text) ? text.toUpperCase() : text;

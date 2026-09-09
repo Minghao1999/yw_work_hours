@@ -1,4 +1,4 @@
-import { daysBetween, formatHours, formatRegionName, formatShiftFilter } from './utils.js';
+import { daysBetween, formatDuration, formatRegionName, formatShiftFilter } from './utils.js';
 
 const { useState } = React;
 
@@ -26,10 +26,10 @@ export function Dashboard({ analysis, siteName, companyName, regionOptions, comp
     React.createElement(
       "section",
       { className: "metrics" },
-      React.createElement(Metric, { label: isDay ? `${formatRegionName(siteName)} 当日工作时长` : `${formatRegionName(siteName)} 总工作时长`, value: `${formatHours(analysis.totalWork)}h`, hint: `${companyName} / ${analysis.shiftCount} 个日期记录` }),
-      React.createElement(Metric, { label: isDay ? `${formatRegionName(siteName)} 当日加班时长` : `${formatRegionName(siteName)} 总加班时长`, value: `${formatHours(analysis.totalOvertime)}h`, hint: `加班占比 ${overtimeRate.toFixed(1)}%` }),
+      React.createElement(Metric, { label: isDay ? `${formatRegionName(siteName)} 当日工作时长` : `${formatRegionName(siteName)} 总工作时长`, value: formatDuration(analysis.totalWork), hint: `${companyName} / ${analysis.shiftCount} 个日期记录` }),
+      React.createElement(Metric, { label: isDay ? `${formatRegionName(siteName)} 当日加班时长` : `${formatRegionName(siteName)} 总加班时长`, value: formatDuration(analysis.totalOvertime), hint: `加班占比 ${overtimeRate.toFixed(1)}%` }),
       React.createElement(Metric, { label: "统计人数", value: analysis.people.length, hint: "按姓名去重" }),
-      React.createElement(Metric, { label: "人均工作时长", value: `${formatHours(avgHours)}h`, hint: isDay ? "当日合计 / 人数" : "表内合计 / 人数" })
+      React.createElement(Metric, { label: "人均工作时长", value: formatDuration(avgHours), hint: isDay ? "当日合计 / 人数" : "表内合计 / 人数" })
     ),
     React.createElement(
       "section",
@@ -214,7 +214,7 @@ export function AdaptiveWorkTable({ data, selectedShift, setSelectedShift }) {
             value: item.totalHours,
             regularMax: workMax,
           })),
-          React.createElement("td", { className: "overtimeHoursCell overtimeNumber" }, `${formatHours(item.overtimeHours)}h`),
+          React.createElement("td", { className: "overtimeHoursCell overtimeNumber" }, formatDuration(item.overtimeHours)),
           React.createElement("td", { className: "num" }, item.workDays),
           React.createElement("td", { className: "num" }, item.punchCount || 0),
           React.createElement("td", { className: "num" }, item.unmatchedCount || 0)
@@ -235,8 +235,8 @@ export function AdaptiveWorkTable({ data, selectedShift, setSelectedShift }) {
         },
       },
       React.createElement("strong", null, tooltip.item.person),
-      React.createElement("span", null, `工作时长：${formatHours(tooltip.item.totalHours)} 小时`),
-      React.createElement("span", null, `加班时长：${formatHours(tooltip.item.overtimeHours)} 小时`),
+      React.createElement("span", null, `工作时长：${formatDuration(tooltip.item.totalHours)}`),
+      React.createElement("span", null, `加班时长：${formatDuration(tooltip.item.overtimeHours)}`),
       React.createElement("span", null, `工作日：${tooltip.item.workDays} 天`),
       React.createElement("span", null, `上班时间：${tooltip.item.timeText || "-"}`),
       React.createElement("span", null, `打卡次数：${tooltip.item.punchCount || 0}`),
@@ -253,10 +253,10 @@ export function WorkInlineBar({ value, regularMax }) {
   return React.createElement(
     "div",
     { className: "inlineBar" },
-    React.createElement("span", { className: "barValue" }, `${formatHours(value)}h`),
+    React.createElement("span", { className: "barValue" }, formatDuration(value)),
     React.createElement(
       "div",
-      { className: "workScale", title: `基础工时 ${formatHours(regularHours)}h，加班 ${formatHours(overtimeHours)}h` },
+      { className: "workScale", title: `基础工时 ${formatDuration(regularHours)}，加班 ${formatDuration(overtimeHours)}` },
       React.createElement(
         "div",
         { className: "barTrack workBaseTrack" },
@@ -277,7 +277,7 @@ export function InlineBar({ value, max, className }) {
   return React.createElement(
     "div",
     { className: "inlineBar" },
-    React.createElement("span", { className: "barValue" }, `${formatHours(value)}h`),
+    React.createElement("span", { className: "barValue" }, formatDuration(value)),
     React.createElement(
       "div",
       { className: "barTrack" },
@@ -285,4 +285,3 @@ export function InlineBar({ value, max, className }) {
     )
   );
 }
-

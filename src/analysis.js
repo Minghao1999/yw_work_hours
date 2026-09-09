@@ -1,5 +1,5 @@
 import { HOUR_MS } from './config.js';
-import { clean, normalize, formatHours, parseAnyDate, parseClockOnDate, parseDurationHours, normalizeShiftLabel, inferShiftLabelFromStart, matchesShiftFilter, addUnmatched, addPunchCount, extractPunches, extractPunchesFromColumns, parseDateOnly, dateKey, shiftDateKey, formatPersonTimeRanges } from './utils.js';
+import { clean, normalize, formatDuration, parseAnyDate, parseClockOnDate, parseDurationHours, normalizeShiftLabel, inferShiftLabelFromStart, matchesShiftFilter, addUnmatched, addPunchCount, extractPunches, extractPunchesFromColumns, parseDateOnly, dateKey, shiftDateKey, formatPersonTimeRanges } from './utils.js';
 import { getRowRegion, getRowCompany } from './parser.js';
 
 export function analyzeRows(rows, columns, filters, startDate, endDate) {
@@ -137,7 +137,7 @@ export function analyzeRows(rows, columns, filters, startDate, endDate) {
     }
     personRow.timeRanges.push({ day: dayRow.day, ranges: dayRow.timeRanges });
     const shiftLabel = dayRow.shiftLabels && dayRow.shiftLabels.size ? ` / ${[...dayRow.shiftLabels].join("+")}` : "";
-    personRow.days.push(`${dayRow.day} ${formatHours(dayRow.totalHours)}h${shiftLabel} / 打卡${dayRow.punchCount || 0}${dayRow.unmatchedCount ? ` / 未配对${dayRow.unmatchedCount}` : ""}`);
+    personRow.days.push(`${dayRow.day} ${formatDuration(dayRow.totalHours)}${shiftLabel} / 打卡${dayRow.punchCount || 0}${dayRow.unmatchedCount ? ` / 未配对${dayRow.unmatchedCount}` : ""}`);
     peopleMap.set(dayRow.person, personRow);
   });
 
@@ -206,4 +206,3 @@ export function buildClockInOutShift(row, columns, person, baseDate) {
     shiftLabel: normalizeShiftLabel(columns.timesheet ? row[columns.timesheet] : ""),
   };
 }
-
