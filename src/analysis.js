@@ -1,6 +1,6 @@
-import { HOUR_MS } from './config.js?v=20260909-20';
-import { clean, normalize, formatDuration, parseAnyDate, parseClockOnDate, parseDurationHours, inferShiftLabelFromStart, matchesShiftFilter, addUnmatched, addPunchCount, extractPunches, extractPunchesFromColumns, parseDateOnly, dateKey, shiftDateKey, formatPersonTimeRanges } from './utils.js?v=20260909-20';
-import { getRowRegion, getRowCompany, getRowTimesheetParts } from './parser.js?v=20260909-20';
+import { DAILY_BREAK_HOURS, HOUR_MS } from './config.js?v=20260909-21';
+import { clean, normalize, formatDuration, parseAnyDate, parseClockOnDate, parseDurationHours, inferShiftLabelFromStart, matchesShiftFilter, addUnmatched, addPunchCount, extractPunches, extractPunchesFromColumns, parseDateOnly, dateKey, shiftDateKey, formatPersonTimeRanges } from './utils.js?v=20260909-21';
+import { getRowRegion, getRowCompany, getRowTimesheetParts } from './parser.js?v=20260909-21';
 
 export function analyzeRows(rows, columns, filters, startDate, endDate) {
   const timeColumns = Array.isArray(columns.timeColumns) ? columns.timeColumns : [];
@@ -81,8 +81,7 @@ export function analyzeRows(rows, columns, filters, startDate, endDate) {
       endTime = new Date(endTime.getTime() + 24 * HOUR_MS);
     }
 
-    const grossHours = Math.max(0, (endTime - shift.start) / HOUR_MS);
-    const hours = Math.max(0, grossHours - (shift.breakHours || 0));
+    const hours = Math.max(0, (endTime - shift.start) / HOUR_MS);
     if (!Number.isFinite(hours) || hours <= 0 || hours > 18) return;
     const shiftLabel = shift.shiftLabel || inferShiftLabelFromStart(shift.start);
     if (!matchesShiftFilter(shiftLabel, shiftNeedle)) return;
@@ -113,6 +112,7 @@ export function analyzeRows(rows, columns, filters, startDate, endDate) {
 
   const peopleMap = new Map();
   [...byPersonDay.values()].forEach((dayRow) => {
+    dayRow.totalHours = Math.max(0, dayRow.totalHours - DAILY_BREAK_HOURS);
     dayRow.overtimeHours = Math.max(0, dayRow.totalHours - 8);
     const personRow = peopleMap.get(dayRow.person) || {
       person: dayRow.person,

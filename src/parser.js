@@ -1,5 +1,5 @@
-import { DEFAULT_START, DEFAULT_END, HOUR_MS, DEFAULT_COMPANY_OPTIONS, columnRules } from './config.js?v=20260909-20';
-import { clean, normalize, parseAnyDate, parseDateOnly, dateKey, extractPunches, parseTimesheetParts } from './utils.js?v=20260909-20';
+import { DEFAULT_START, DEFAULT_END, HOUR_MS, DEFAULT_COMPANY_OPTIONS, columnRules } from './config.js?v=20260909-21';
+import { clean, normalize, parseAnyDate, parseDateOnly, dateKey, extractPunches, parseTimesheetParts } from './utils.js?v=20260909-21';
 
 export function readWorkbookFile(file, data) {
   if (/\.csv$/i.test(file.name)) {

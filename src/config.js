@@ -1,6 +1,7 @@
 export const DEFAULT_START = "2026-08-31";
 export const DEFAULT_END = "2026-09-06";
 export const HOUR_MS = 60 * 60 * 1000;
+export const DAILY_BREAK_HOURS = 0.5;
 export const SHIFT_DAY_CUTOFF_HOUR = 8;
 export const DEFAULT_COMPANY_OPTIONS = [];
 

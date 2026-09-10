@@ -1,8 +1,8 @@
-import { DEFAULT_START, sampleRows } from './config.js?v=20260909-20';
-import { analyzeRows } from './analysis.js?v=20260909-20';
-import { Dashboard } from './components.js?v=20260909-20';
-import { clean, formatRegionName, normalize, parseTimesheetParts } from './utils.js?v=20260909-20';
-import { guessColumns, inferSiteName, inferCompanyName, getRegionOptions, getCompanyOptions, inferDateRange, readWorkbookFile, readSheet, getRowTimesheetParts, getTimesheetCandidates } from './parser.js?v=20260909-20';
+import { DEFAULT_START, sampleRows } from './config.js?v=20260909-21';
+import { analyzeRows } from './analysis.js?v=20260909-21';
+import { Dashboard } from './components.js?v=20260909-21';
+import { clean, formatRegionName, normalize, parseTimesheetParts } from './utils.js?v=20260909-21';
+import { guessColumns, inferSiteName, inferCompanyName, getRegionOptions, getCompanyOptions, inferDateRange, readWorkbookFile, readSheet, getRowTimesheetParts, getTimesheetCandidates } from './parser.js?v=20260909-21';
 
 const { useEffect, useMemo, useState } = React;
 const CANONICAL_BASE_COLUMNS = ["人员姓名", "人员ID", "日期", "时间表", "地区", "劳务公司", "班次", "Clock In", "Clock Out", "总休息时长", "考勤记录"];
@@ -159,13 +159,12 @@ export function App() {
       React.createElement(
         "div",
         { className: "brandBlock" },
-        React.createElement("div", { className: "brandMark", "aria-hidden": "true" }, "WH"),
+        React.createElement("div", { className: "brandMark", "aria-hidden": "true" }, "YW"),
         React.createElement(
           "div",
           { className: "title" },
-          React.createElement("span", { className: "eyebrow" }, "WORKFORCE REPORT"),
-          React.createElement("h1", null, "考勤工时"),
-          React.createElement("p", null, "快速核对出勤、工时与加班情况")
+          React.createElement("span", { className: "eyebrow" }, "WORKFORCE ANALYTICS"),
+          React.createElement("h1", null, "YW Workforce Insights")
         )
       ),
       hasRows ? React.createElement(
@@ -221,7 +220,7 @@ export function App() {
       )
     ),
     notice ? React.createElement("div", { className: "notice" }, notice) : null,
-    !canAnalyze
+    !canAnalyze && hasRows
       ? React.createElement(
           "section",
           { className: "panel empty" },
@@ -229,23 +228,15 @@ export function App() {
             "div",
             null,
             React.createElement("span", { className: "emptyIcon", "aria-hidden": "true" }, "↥"),
-            React.createElement("h2", null, hasRows ? "没有匹配到可统计记录" : "先上传一份考勤表"),
+            React.createElement("h2", null, "没有匹配到可统计记录"),
             React.createElement(
               "p",
               null,
-              hasRows
-                ? "请重新上传考勤表。我会自动扫描表头和列内容，支持完整时间戳、同一格里的开始/结束时间，以及分开的上班/下班打卡时间列。"
-                : "系统会从时间表中自动识别地区、劳务公司和班次，并汇总每个人的工时与加班。"
-            ),
-            !hasRows ? React.createElement(
-              "div",
-              { className: "emptyHints" },
-              React.createElement("span", null, "时间表格式：NJC-delin-晚班"),
-              React.createElement("span", null, "每天超过 8 小时计为加班")
-            ) : null
+              "请确认表格中包含姓名、日期和打卡时间。"
+            )
           )
         )
-      : React.createElement(Dashboard, {
+      : canAnalyze ? React.createElement(Dashboard, {
           analysis,
           siteName: activeRegion,
           companyName: activeCompany,
@@ -266,7 +257,7 @@ export function App() {
           dateRange,
           activeRange,
           comparison,
-        })
+        }) : null
   );
 }
 

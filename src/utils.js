@@ -1,4 +1,4 @@
-import { HOUR_MS, SHIFT_DAY_CUTOFF_HOUR } from './config.js?v=20260909-20';
+import { HOUR_MS, SHIFT_DAY_CUTOFF_HOUR } from './config.js?v=20260909-21';
 
 export function parseClockOnDate(value, date) {
   if (!date) return null;

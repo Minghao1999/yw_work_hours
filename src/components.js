@@ -1,4 +1,4 @@
-import { daysBetween, formatDuration, formatRegionName } from './utils.js?v=20260909-20';
+import { daysBetween, formatDuration, formatRegionName } from './utils.js?v=20260909-21';
 
 const { useState } = React;
 
