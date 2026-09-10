@@ -1,51 +1,76 @@
-import { DEFAULT_START, sampleRows } from './config.js';
-import { analyzeRows } from './analysis.js';
-import { Dashboard } from './components.js';
-import { formatRegionName, formatShiftFilter, normalize } from './utils.js';
-import { guessColumns, inferSiteName, inferCompanyName, getRegionOptions, getCompanyOptions, inferDateRange, readWorkbookFile, readSheet } from './parser.js';
+import { DEFAULT_START, sampleRows } from './config.js?v=20260909-20';
+import { analyzeRows } from './analysis.js?v=20260909-20';
+import { Dashboard } from './components.js?v=20260909-20';
+import { clean, formatRegionName, normalize, parseTimesheetParts } from './utils.js?v=20260909-20';
+import { guessColumns, inferSiteName, inferCompanyName, getRegionOptions, getCompanyOptions, inferDateRange, readWorkbookFile, readSheet, getRowTimesheetParts, getTimesheetCandidates } from './parser.js?v=20260909-20';
 
 const { useEffect, useMemo, useState } = React;
+const CANONICAL_BASE_COLUMNS = ["人员姓名", "人员ID", "日期", "时间表", "地区", "劳务公司", "班次", "Clock In", "Clock Out", "总休息时长", "考勤记录"];
 
 export function App() {
   const [rows, setRows] = useState(sampleRows);
   const [columns, setColumns] = useState(sampleRows[0] ? Object.keys(sampleRows[0]) : []);
   const [fileName, setFileName] = useState("未上传文件");
   const [notice, setNotice] = useState("");
-  const [importInfo, setImportInfo] = useState("");
   const [mode, setMode] = useState("week");
   const [selectedDate, setSelectedDate] = useState(DEFAULT_START);
   const [selectedShift, setSelectedShift] = useState("all");
+  const [analysisMode, setAnalysisMode] = useState("region");
 
   const guessed = useMemo(() => guessColumns(columns, rows), [columns, rows]);
-  const siteName = useMemo(() => inferSiteName(rows, guessed), [rows, guessed.personId]);
-  const companyName = useMemo(() => inferCompanyName(rows, guessed), [rows, guessed.company]);
-  const regionOptions = useMemo(() => getRegionOptions(rows, guessed, siteName), [rows, guessed.region, guessed.personId, siteName]);
-  const companyOptions = useMemo(() => getCompanyOptions(rows, guessed, companyName), [rows, guessed.company, companyName]);
+  const siteName = useMemo(() => inferSiteName(rows, guessed), [rows, guessed.personId, guessed.timesheet]);
+  const companyName = useMemo(() => inferCompanyName(rows, guessed), [rows, guessed.company, guessed.timesheet]);
+  const regionOptions = useMemo(() => getRegionOptions(rows, guessed, siteName), [rows, guessed.region, guessed.personId, guessed.timesheet, siteName]);
   const [selectedRegion, setSelectedRegion] = useState("");
   const [selectedCompany, setSelectedCompany] = useState("");
+  const activeRegion = selectedRegion || regionOptions[0] || siteName;
+  const companyOptions = useMemo(() => getCompanyOptions(rows, guessed, companyName, activeRegion), [rows, guessed.region, guessed.company, guessed.personId, guessed.timesheet, companyName, activeRegion]);
   const dateRange = useMemo(() => inferDateRange(rows, guessed), [rows, guessed.date, guessed.time, guessed.timeColumns.join("|"), guessed.clockIn, guessed.clockOut]);
   const activeRange = mode === "day"
     ? { start: selectedDate, end: selectedDate }
     : dateRange;
-  const activeRegion = selectedRegion || regionOptions[0] || siteName;
   const activeCompany = selectedCompany || companyOptions[0] || companyName;
+  const effectiveShift = analysisMode === "person" ? selectedShift : "all";
+  const currentScopeLabel = analysisMode === "region"
+    ? `${regionOptions.length} 个地区`
+    : analysisMode === "company"
+      ? formatRegionName(activeRegion)
+      : `${formatRegionName(activeRegion)} · ${activeCompany || "未识别劳务公司"}`;
   const hasRows = rows.length > 0;
+  const canAnalyze = Boolean(guessed.person && ((guessed.clockIn && guessed.clockOut) || guessed.time || guessed.timeColumns.length));
 
   const analysis = useMemo(
     () => analyzeRows(rows, guessed, {
       region: activeRegion,
       company: activeCompany,
-      shift: selectedShift,
+      shift: effectiveShift,
       fallbackRegion: siteName,
       fallbackCompany: companyName,
     }, activeRange.start, activeRange.end),
-    [rows, guessed.person, guessed.region, guessed.company, guessed.personId, guessed.date, guessed.time, guessed.timeColumns.join("|"), guessed.clockIn, guessed.clockOut, guessed.breakTime, guessed.timesheet, activeRegion, activeCompany, selectedShift, siteName, companyName, activeRange.start, activeRange.end]
+    [rows, guessed.person, guessed.region, guessed.company, guessed.personId, guessed.date, guessed.time, guessed.timeColumns.join("|"), guessed.clockIn, guessed.clockOut, guessed.breakTime, guessed.timesheet, activeRegion, activeCompany, effectiveShift, siteName, companyName, activeRange.start, activeRange.end]
+  );
+
+  const comparison = useMemo(
+    () => buildComparison(rows, guessed, {
+      regions: regionOptions,
+      companies: companyOptions,
+      selectedRegion: activeRegion,
+      selectedCompany: activeCompany,
+      selectedShift: effectiveShift,
+      fallbackRegion: siteName,
+      fallbackCompany: companyName,
+      startDate: activeRange.start,
+      endDate: activeRange.end,
+      canAnalyze,
+    }),
+    [rows, guessed.person, guessed.region, guessed.company, guessed.personId, guessed.date, guessed.time, guessed.timeColumns.join("|"), guessed.clockIn, guessed.clockOut, guessed.breakTime, guessed.timesheet, regionOptions.join("|"), companyOptions.join("|"), activeRegion, activeCompany, effectiveShift, siteName, companyName, activeRange.start, activeRange.end, canAnalyze]
   );
 
   useEffect(() => {
     if (!regionOptions.length) return;
     if (!selectedRegion || !regionOptions.some((value) => normalize(value) === normalize(selectedRegion))) {
       setSelectedRegion(regionOptions[0]);
+      setSelectedCompany("");
     }
   }, [regionOptions.join("|"), selectedRegion]);
 
@@ -63,32 +88,67 @@ export function App() {
   }, [dateRange.start, dateRange.end, selectedDate]);
 
   async function handleFile(event) {
-    const file = event.target.files && event.target.files[0];
-    if (!file) return;
+    const files = Array.from(event.target.files || []);
+    if (!files.length) return;
     setNotice("");
     try {
-      const data = await file.arrayBuffer();
-      const workbook = readWorkbookFile(file, data);
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      const imported = readSheet(sheet);
-      const parsed = imported.rows;
-      if (!parsed.length) throw new Error("表格第一张 sheet 没有可读取的数据");
-      const importedColumns = guessColumns(imported.columns, parsed);
+      const imports = [];
+      let maxTimeColumns = 0;
+      for (const file of files) {
+        const data = await file.arrayBuffer();
+        const workbook = readWorkbookFile(file, data);
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const imported = readSheet(sheet);
+        if (imported.rows.length) {
+          const fileColumns = guessColumns(imported.columns, imported.rows);
+          maxTimeColumns = Math.max(maxTimeColumns, fileColumns.timeColumns.length || 0);
+          imports.push({
+            file,
+            ...imported,
+            rows: normalizeImportedRows(imported.rows, fileColumns),
+          });
+        }
+      }
+
+      const importedRows = imports.flatMap((item) => item.rows);
+      if (!importedRows.length) throw new Error("表格第一张 sheet 没有可读取的数据");
+      const parsed = dedupeRows(importedRows);
+      const mergedColumns = [
+        ...CANONICAL_BASE_COLUMNS,
+        ...Array.from({ length: maxTimeColumns }, (_, index) => `打卡时间${index + 1}`),
+      ];
+      const importedColumns = guessColumns(mergedColumns, parsed);
       const importedSite = inferSiteName(parsed, importedColumns);
       const importedCompany = inferCompanyName(parsed, importedColumns);
+      const nextRegions = getRegionOptions(parsed, importedColumns, importedSite);
+      const nextRegion = nextRegions[0] || importedSite;
+      const nextCompanies = getCompanyOptions(parsed, importedColumns, importedCompany, nextRegion);
       setRows(parsed);
-      setColumns(imported.columns);
-      setSelectedRegion(getRegionOptions(parsed, importedColumns, importedSite)[0] || importedSite);
-      setSelectedCompany(getCompanyOptions(parsed, importedColumns, importedCompany)[0] || importedCompany);
+      setColumns(mergedColumns);
+      setSelectedRegion(nextRegion);
+      setSelectedCompany(nextCompanies[0] || importedCompany);
       setSelectedShift("all");
-      setFileName(file.name);
-      setImportInfo(imported.info);
+      setAnalysisMode("region");
+      const nextFileNames = [...new Set(files.map((file) => file.name))];
+      setFileName(nextFileNames.length === 1 ? nextFileNames[0] : `${nextFileNames.length} 个文件`);
+      event.target.value = "";
     } catch (error) {
       setNotice(error.message || "文件解析失败，请确认是 .xlsx、.xls 或 .csv 文件");
     }
   }
 
-  const canAnalyze = Boolean(guessed.person && ((guessed.clockIn && guessed.clockOut) || guessed.time || guessed.timeColumns.length));
+  function clearData() {
+    setRows([]);
+    setColumns([]);
+    setFileName("未上传文件");
+    setNotice("");
+    setSelectedRegion("");
+    setSelectedCompany("");
+    setSelectedShift("all");
+    setAnalysisMode("region");
+    setMode("week");
+    setSelectedDate(DEFAULT_START);
+  }
 
   return React.createElement(
     "main",
@@ -98,28 +158,69 @@ export function App() {
       { className: "topbar" },
       React.createElement(
         "div",
-        { className: "title" },
-            React.createElement("h1", null, hasRows && activeRegion ? `${formatRegionName(activeRegion)} 考勤工时 Dashboard` : "考勤工时 Dashboard"),
-        React.createElement("p", null, "按上传表日期统计，每天超过 8 小时的部分计入加班。")
+        { className: "brandBlock" },
+        React.createElement("div", { className: "brandMark", "aria-hidden": "true" }, "WH"),
+        React.createElement(
+          "div",
+          { className: "title" },
+          React.createElement("span", { className: "eyebrow" }, "WORKFORCE REPORT"),
+          React.createElement("h1", null, "考勤工时"),
+          React.createElement("p", null, "快速核对出勤、工时与加班情况")
+        )
       ),
+      hasRows ? React.createElement(
+        "div",
+        { className: "currentScope" },
+        React.createElement("span", null, "当前视图"),
+        React.createElement("strong", null, currentScopeLabel),
+        React.createElement("small", null, `${activeRange.start} 至 ${activeRange.end}`)
+      ) : null
+    ),
+    React.createElement(
+      "section",
+      { className: "controlBar" },
       React.createElement(
         "div",
-        { className: "upload" },
+        { className: "uploadArea" },
+        React.createElement("span", { className: "stepLabel" }, "01 · 数据文件"),
         React.createElement(
-          "label",
-          { className: "fileButton" },
-          "上传考勤表",
-          React.createElement("input", {
-            type: "file",
-            accept: ".xlsx,.xls,.csv",
-            onChange: handleFile,
-          })
+          "div",
+          { className: "uploadRow" },
+          React.createElement(
+            "label",
+            { className: "uploadControl" },
+            React.createElement(
+              "span",
+              { className: "fileButton" },
+              React.createElement("span", { "aria-hidden": "true" }, "+"),
+              "选择考勤表",
+              React.createElement("input", {
+                type: "file",
+                accept: ".xlsx,.xls,.csv",
+                multiple: true,
+                onChange: handleFile,
+              })
+            ),
+            React.createElement(
+              "span",
+              { className: "fileMeta" },
+              React.createElement("strong", { className: "fileName" }, fileName),
+              React.createElement("small", null, "支持 Excel / CSV，可一次选择多个文件")
+            )
+          ),
+          hasRows ? React.createElement(
+            "button",
+            {
+              type: "button",
+              className: "clearButton",
+              onClick: clearData,
+            },
+            "清空"
+          ) : null
         ),
-        React.createElement("span", { className: "fileName" }, fileName)
       )
     ),
     notice ? React.createElement("div", { className: "notice" }, notice) : null,
-    hasRows ? React.createElement("div", { className: "autoStatus" }, importInfo, `。统计范围：${formatRegionName(activeRegion)} / ${activeRange.start} 至 ${activeRange.end}。劳务公司：${activeCompany}。班次：${formatShiftFilter(selectedShift)}。`) : null,
     !canAnalyze
       ? React.createElement(
           "section",
@@ -127,20 +228,29 @@ export function App() {
           React.createElement(
             "div",
             null,
-            React.createElement("h2", null, hasRows ? "没有匹配到可统计记录" : "请上传考勤表"),
+            React.createElement("span", { className: "emptyIcon", "aria-hidden": "true" }, "↥"),
+            React.createElement("h2", null, hasRows ? "没有匹配到可统计记录" : "先上传一份考勤表"),
             React.createElement(
               "p",
               null,
               hasRows
                 ? "请重新上传考勤表。我会自动扫描表头和列内容，支持完整时间戳、同一格里的开始/结束时间，以及分开的上班/下班打卡时间列。"
-                : "上传后会自动识别地区、劳务公司、班次、上下班时间和休息时间，并生成工时统计。"
-            )
+                : "系统会从时间表中自动识别地区、劳务公司和班次，并汇总每个人的工时与加班。"
+            ),
+            !hasRows ? React.createElement(
+              "div",
+              { className: "emptyHints" },
+              React.createElement("span", null, "时间表格式：NJC-delin-晚班"),
+              React.createElement("span", null, "每天超过 8 小时计为加班")
+            ) : null
           )
         )
       : React.createElement(Dashboard, {
           analysis,
           siteName: activeRegion,
           companyName: activeCompany,
+          analysisMode,
+          setAnalysisMode,
           regionOptions,
           companyOptions,
           selectedRegion: activeRegion,
@@ -155,6 +265,83 @@ export function App() {
           setSelectedDate,
           dateRange,
           activeRange,
+          comparison,
         })
   );
+}
+
+function normalizeImportedRows(rows, columns) {
+  return rows.map((row) => {
+    const timesheetCandidates = getTimesheetCandidates(row, columns);
+    const timesheetText = clean(columns.timesheet ? row[columns.timesheet] : "") || timesheetCandidates[0] || "";
+    const detectedTimesheetParts = getRowTimesheetParts(row, columns);
+    const parsedTimesheetParts = parseTimesheetParts(timesheetText);
+    const timesheetParts = {
+      region: detectedTimesheetParts.region || parsedTimesheetParts.region,
+      company: detectedTimesheetParts.company || parsedTimesheetParts.company,
+      shift: detectedTimesheetParts.shift || parsedTimesheetParts.shift,
+    };
+    const normalized = {
+      "人员姓名": columns.person ? row[columns.person] : "",
+      "人员ID": columns.personId ? row[columns.personId] : "",
+      "日期": columns.date ? row[columns.date] : "",
+      "时间表": timesheetText,
+      "地区": timesheetParts.region || (columns.region ? row[columns.region] : ""),
+      "劳务公司": timesheetParts.company || (columns.company ? row[columns.company] : ""),
+      "班次": timesheetParts.shift,
+      "Clock In": columns.clockIn ? row[columns.clockIn] : "",
+      "Clock Out": columns.clockOut ? row[columns.clockOut] : "",
+      "总休息时长": columns.breakTime ? row[columns.breakTime] : "",
+      "考勤记录": columns.time ? row[columns.time] : "",
+    };
+    (columns.timeColumns || []).forEach((column, index) => {
+      normalized[`打卡时间${index + 1}`] = row[column];
+    });
+    return normalized;
+  });
+}
+
+function dedupeRows(rows) {
+  const seen = new Set();
+  return rows.filter((row) => {
+    const timeColumns = Object.keys(row).filter((column) => /^打卡时间\d+$/.test(column)).sort();
+    const key = [...CANONICAL_BASE_COLUMNS, ...timeColumns]
+      .map((column) => clean(row[column]))
+      .join("\u001f");
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function buildComparison(rows, columns, config) {
+  if (!config.canAnalyze) return { regions: [], companies: [] };
+
+  const summarize = (label, filters) => {
+    const result = analyzeRows(rows, columns, filters, config.startDate, config.endDate);
+    return {
+      label,
+      totalWork: result.totalWork,
+      totalOvertime: result.totalOvertime,
+      peopleCount: result.people.length,
+      dayCount: result.dayCount || 0,
+    };
+  };
+
+  return {
+    regions: config.regions.map((region) => summarize(formatRegionName(region), {
+      region,
+      company: "",
+      shift: config.selectedShift,
+      fallbackRegion: config.fallbackRegion,
+      fallbackCompany: "",
+    })),
+    companies: config.companies.map((company) => summarize(company, {
+      region: config.selectedRegion,
+      company,
+      shift: config.selectedShift,
+      fallbackRegion: config.fallbackRegion,
+      fallbackCompany: config.fallbackCompany,
+    })),
+  };
 }

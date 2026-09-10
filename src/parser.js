@@ -1,5 +1,5 @@
-import { DEFAULT_START, DEFAULT_END, HOUR_MS, columnRules } from './config.js';
-import { clean, normalize, parseAnyDate, parseDateOnly, dateKey, extractPunches } from './utils.js';
+import { DEFAULT_START, DEFAULT_END, HOUR_MS, DEFAULT_COMPANY_OPTIONS, columnRules } from './config.js?v=20260909-20';
+import { clean, normalize, parseAnyDate, parseDateOnly, dateKey, extractPunches, parseTimesheetParts } from './utils.js?v=20260909-20';
 
 export function readWorkbookFile(file, data) {
   if (/\.csv$/i.test(file.name)) {
@@ -10,7 +10,17 @@ export function readWorkbookFile(file, data) {
 }
 
 export function decodeCsvText(data) {
-  const encodings = ["utf-8", "gb18030", "gbk", "big5"];
+  // UTF-8 text can also be decoded as GBK/GB18030, but the result is
+  // mojibake made from valid Chinese characters. A character-count heuristic
+  // therefore cannot reliably distinguish it. Prefer UTF-8 whenever the byte
+  // sequence is valid, then fall back to legacy Chinese encodings.
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(data);
+  } catch (error) {
+    // Continue with legacy encodings below.
+  }
+
+  const encodings = ["gb18030", "gbk", "big5"];
   const candidates = encodings.map((encoding) => {
     try {
       const text = new TextDecoder(encoding).decode(data);
@@ -27,7 +37,7 @@ export function decodeCsvText(data) {
 export function mojibakeScore(text) {
   const bad = (text.match(/[�]|Ã|Â|å|æ|ä|œ|¤/g) || []).length;
   const chinese = (text.match(/[\u4e00-\u9fa5]/g) || []).length;
-  const headers = /Person Name|Clock In|Clock Out|Timesheet/.test(text) ? -20 : 0;
+  const headers = /Person Name|Clock In|Clock Out|Timesheet|人员姓名|时间表/.test(text) ? -20 : 0;
   return bad * 10 - chinese * 2 + headers;
 }
 
@@ -126,6 +136,7 @@ export function bestHeaderColumn(columns, key, rules) {
     if (key === "clockOut" && /^clock\s*out$/i.test(text)) score += 30;
     if (key === "breakTime" && /total\s*break/i.test(text)) score += 30;
     if (key === "timesheet" && /timesheet/i.test(text)) score += 30;
+    if (key === "shift" && /^班次$|^shift$/i.test(text)) score += 30;
     if (key === "personId" && /person\s*id/i.test(text)) score += 30;
     if (key === "company" && /劳务公司|服务公司|外包公司|供应商|company|vendor|agency|labor|staffing|contractor/i.test(text)) score += 25;
     if (key === "time" && /考勤记录|考勤时间|打卡时间/i.test(text)) score += 20;
@@ -162,10 +173,14 @@ export function inferColumns(columns, rows) {
     date: best("date", 3),
     time: best("time", 4),
     timeColumns: scores
-      .filter((score) => score.clock >= 3 && score.column !== best("date", 3))
+      .filter((score) => score.clock >= 3 && score.column !== best("date", 3) && !isDurationColumn(score.column))
       .sort((a, b) => columns.indexOf(a.column) - columns.indexOf(b.column))
       .map((score) => score.column),
   };
+}
+
+export function isDurationColumn(column) {
+  return /时长|总工作|总加班|总休息|total|duration|work\s*time|overtime|break|clock\s*time/i.test(clean(column));
 }
 
 export function scoreTimeValue(value) {
@@ -188,6 +203,7 @@ export function scoreClockValue(value) {
 export function scoreTimeHeader(column) {
   const text = clean(column);
   if (/日期|date/i.test(text)) return 0;
+  if (isDurationColumn(text)) return 0;
   return /时间|打卡|上班|下班|签到|签退|clock|punch|time/i.test(text) ? 2 : 0;
 }
 
@@ -208,6 +224,11 @@ export function scorePersonValue(value) {
 }
 
 export function inferSiteName(rows, columns) {
+  const timesheetRegion = rows
+    .map((row) => getRowTimesheetParts(row, columns).region)
+    .find(Boolean);
+  if (timesheetRegion) return timesheetRegion;
+
   if (columns.personId) {
     const id = rows.map((row) => clean(row[columns.personId])).find(Boolean);
     const prefix = id && id.match(/^[A-Za-z]+/);
@@ -217,19 +238,35 @@ export function inferSiteName(rows, columns) {
 }
 
 export function inferCompanyName(rows, columns) {
+  const timesheetCompany = rows
+    .map((row) => getRowTimesheetParts(row, columns).company)
+    .find(Boolean);
+  if (timesheetCompany) return timesheetCompany;
+
   if (columns.company) {
     const company = rows.map((row) => clean(row[columns.company])).find(Boolean);
     if (company) return company;
   }
-  return "delin";
+  return "";
 }
 
 export function getRegionOptions(rows, columns, fallbackRegion) {
   return uniqueDimension(rows.map((row) => getRowRegion(row, columns, fallbackRegion)), fallbackRegion);
 }
 
-export function getCompanyOptions(rows, columns, fallbackCompany) {
-  return uniqueDimension(rows.map((row) => getRowCompany(row, columns, fallbackCompany)), fallbackCompany);
+export function getCompanyOptions(rows, columns, fallbackCompany, regionFilter = "") {
+  const regionNeedle = normalize(regionFilter);
+  const companies = [];
+  rows.forEach((row) => {
+    const parts = getRowTimesheetParts(row, columns);
+    const rowRegion = parts.region || getRowRegion(row, columns, "");
+    if (regionNeedle && normalize(rowRegion) !== regionNeedle) return;
+    companies.push(parts.company || getRowCompany(row, columns, ""));
+  });
+
+  const realCompanies = uniqueDimension(companies, "");
+  if (realCompanies.length) return realCompanies;
+  return uniqueDimension(DEFAULT_COMPANY_OPTIONS, fallbackCompany);
 }
 
 export function uniqueDimension(values, fallback) {
@@ -247,6 +284,10 @@ export function getRowRegion(row, columns, fallbackRegion) {
     const region = clean(row[columns.region]);
     if (region) return region;
   }
+
+  const timesheetRegion = getRowTimesheetParts(row, columns).region;
+  if (timesheetRegion) return timesheetRegion;
+
   if (columns.personId) {
     const personId = clean(row[columns.personId]);
     const prefix = personId.match(/^[A-Za-z]+/);
@@ -260,7 +301,76 @@ export function getRowCompany(row, columns, fallbackCompany) {
     const company = clean(row[columns.company]);
     if (company) return company;
   }
+
+  const timesheetCompany = getRowTimesheetParts(row, columns).company;
+  if (timesheetCompany) return timesheetCompany;
+
   return fallbackCompany || "";
+}
+
+export function getRowTimesheetParts(row, columns) {
+  const explicitShift = columns.shift ? clean(row[columns.shift]) : "";
+  const explicitRegion = columns.region ? clean(row[columns.region]) : "";
+  const explicitCompany = columns.company ? clean(row[columns.company]) : "";
+  if (explicitRegion && explicitCompany) {
+    return { region: explicitRegion, company: explicitCompany, shift: explicitShift };
+  }
+
+  const candidates = getTimesheetCandidates(row, columns);
+
+  for (const candidate of candidates) {
+    const parts = parseTimesheetParts(candidate);
+    if (parts.region || parts.company || parts.shift) {
+      return {
+        region: explicitRegion || parts.region,
+        company: explicitCompany || parts.company,
+        shift: explicitShift || parts.shift,
+      };
+    }
+  }
+
+  return { region: explicitRegion, company: explicitCompany, shift: explicitShift };
+}
+
+export function getTimesheetCandidates(row, columns) {
+  const candidates = [];
+  const addCandidate = (value) => {
+    const text = clean(value);
+    if (text && !candidates.includes(text)) candidates.push(text);
+  };
+
+  if (columns.timesheet) addCandidate(row[columns.timesheet]);
+  ["时间表", "Timesheet", "Time Sheet", "timesheet", "time sheet"].forEach((column) => {
+    if (Object.prototype.hasOwnProperty.call(row, column)) addCandidate(row[column]);
+  });
+
+  Object.entries(row).forEach(([column, value]) => {
+    const columnText = clean(column);
+    const text = clean(value);
+    if (/时间表|timesheet|time\s*sheet|班次/i.test(columnText)) addCandidate(text);
+    if (looksLikeTimesheetValue(text)) addCandidate(text);
+  });
+
+  return candidates;
+}
+
+export function looksLikeTimesheetValue(value) {
+  const text = clean(value).replace(/[－–—‑‒−﹣－]/g, "-");
+  return /^[^-]+-[^-]+-.*(早|晚)/.test(text);
+}
+
+export function getTimesheetCompanies(rows, columns, regionFilter = "") {
+  const regionNeedle = normalize(regionFilter);
+  const companies = [];
+  rows.forEach((row) => {
+    for (const candidate of getTimesheetCandidates(row, columns)) {
+      const parts = parseTimesheetParts(candidate);
+      if (!parts.company) continue;
+      if (regionNeedle && normalize(parts.region) !== regionNeedle) continue;
+      companies.push(parts.company);
+    }
+  });
+  return uniqueDimension(companies, "");
 }
 
 export function inferDateRange(rows, columns) {

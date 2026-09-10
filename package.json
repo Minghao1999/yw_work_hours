@@ -4,8 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "dev": "python3 -m http.server 5173",
     "start": "python3 -m http.server 5173",
-    "check": "node --check src/main.js"
+    "check": "node --check src/main.js && node --test",
+    "test": "node --test"
   },
   "description": "React dashboard for attendance work hours and overtime analysis."
 }

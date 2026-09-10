@@ -2,6 +2,7 @@ export const DEFAULT_START = "2026-08-31";
 export const DEFAULT_END = "2026-09-06";
 export const HOUR_MS = 60 * 60 * 1000;
 export const SHIFT_DAY_CUTOFF_HOUR = 8;
+export const DEFAULT_COMPANY_OPTIONS = [];
 
 export const sampleRows = [];
 
@@ -13,7 +14,8 @@ export const columnRules = {
   time: [/考勤时间/, /考勤记录/, /打卡时间/, /上班时间/, /下班时间/, /开始时间/, /结束时间/, /首次打卡/, /末次打卡/, /签到/, /签退/, /刷卡/, /punch/i, /clock/i, /\btime\b/i],
   clockIn: [/^clock\s*in$/i, /上班打卡/, /上班时间/],
   clockOut: [/^clock\s*out$/i, /下班打卡/, /下班时间/],
-  breakTime: [/total\s*break/i, /break\s*time/i, /休息/],
-  timesheet: [/timesheet/i, /班次/, /时段/],
+  breakTime: [/total\s*break/i, /break\s*time/i, /break\s*out/i, /休息/, /总休息时长/],
+  timesheet: [/timesheet/i, /time\s*sheet/i, /时间表/, /班次/, /时段/],
+  shift: [/^班次$/, /^shift$/i],
   personId: [/person\s*id/i, /人员ID/i, /工号/],
 };

@@ -1,11 +1,11 @@
-import { HOUR_MS } from './config.js';
-import { clean, normalize, formatDuration, parseAnyDate, parseClockOnDate, parseDurationHours, normalizeShiftLabel, inferShiftLabelFromStart, matchesShiftFilter, addUnmatched, addPunchCount, extractPunches, extractPunchesFromColumns, parseDateOnly, dateKey, shiftDateKey, formatPersonTimeRanges } from './utils.js';
-import { getRowRegion, getRowCompany } from './parser.js';
+import { HOUR_MS } from './config.js?v=20260909-20';
+import { clean, normalize, formatDuration, parseAnyDate, parseClockOnDate, parseDurationHours, inferShiftLabelFromStart, matchesShiftFilter, addUnmatched, addPunchCount, extractPunches, extractPunchesFromColumns, parseDateOnly, dateKey, shiftDateKey, formatPersonTimeRanges } from './utils.js?v=20260909-20';
+import { getRowRegion, getRowCompany, getRowTimesheetParts } from './parser.js?v=20260909-20';
 
 export function analyzeRows(rows, columns, filters, startDate, endDate) {
   const timeColumns = Array.isArray(columns.timeColumns) ? columns.timeColumns : [];
   if (!columns.person || (!(columns.clockIn && columns.clockOut) && !columns.time && timeColumns.length < 1)) {
-    return { people: [], totalWork: 0, totalOvertime: 0, shiftCount: 0 };
+    return { people: [], totalWork: 0, totalOvertime: 0, shiftCount: 0, dayCount: 0 };
   }
 
   const start = parseDateOnly(startDate);
@@ -154,6 +154,7 @@ export function analyzeRows(rows, columns, filters, startDate, endDate) {
     totalWork: people.reduce((sum, item) => sum + item.totalHours, 0),
     totalOvertime: people.reduce((sum, item) => sum + item.overtimeHours, 0),
     shiftCount: people.reduce((sum, item) => sum + item.workDays, 0),
+    dayCount: new Set([...byPersonDay.values()].filter((dayRow) => dayRow.totalHours > 0).map((dayRow) => dayRow.day)).size,
   };
 }
 
@@ -203,6 +204,6 @@ export function buildClockInOutShift(row, columns, person, baseDate) {
     end,
     breakHours: columns.breakTime ? parseDurationHours(row[columns.breakTime]) : 0,
     punchCount: 2,
-    shiftLabel: normalizeShiftLabel(columns.timesheet ? row[columns.timesheet] : ""),
+    shiftLabel: getRowTimesheetParts(row, columns).shift,
   };
 }

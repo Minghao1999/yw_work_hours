@@ -1,4 +1,4 @@
-import { HOUR_MS, SHIFT_DAY_CUTOFF_HOUR } from './config.js';
+import { HOUR_MS, SHIFT_DAY_CUTOFF_HOUR } from './config.js?v=20260909-20';
 
 export function parseClockOnDate(value, date) {
   if (!date) return null;
@@ -28,6 +28,32 @@ export function normalizeShiftLabel(value) {
   if (text.includes("早")) return "早班";
   if (text.includes("晚")) return "晚班";
   return text;
+}
+
+export function parseTimesheetParts(value) {
+  const text = clean(value);
+  if (!text) return { region: "", company: "", shift: "" };
+
+  const normalizedText = text.replace(/[－–—‑‒−﹣－]/g, "-");
+  const parts = text
+    .replace(/[－–—‑‒−﹣－]/g, "-")
+    .split(/\s*-\s*/)
+    .map((part) => clean(part))
+    .filter(Boolean);
+
+  const shiftIndex = parts.findIndex((part) => /早|晚/.test(part));
+  const shift = shiftIndex >= 0 ? normalizeShiftLabel(parts[shiftIndex]) : normalizeShiftLabel(normalizedText);
+  if (parts.length < 3) return { region: "", company: "", shift };
+
+  const companyParts = shiftIndex > 1
+    ? parts.slice(1, shiftIndex)
+    : parts.slice(1, -1);
+
+  return {
+    region: parts[0] || "",
+    company: companyParts.join("-"),
+    shift,
+  };
 }
 
 export function inferShiftLabelFromStart(start) {
@@ -148,7 +174,10 @@ export function shiftDateKey(date) {
 }
 
 export function clean(value) {
-  return String(value || "").trim();
+  return String(value ?? "")
+    .replace(/^\ufeff/, "")
+    .replace(/\u00a0/g, " ")
+    .trim();
 }
 
 export function normalize(value) {
