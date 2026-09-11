@@ -1,4 +1,4 @@
-import { HOUR_MS, SHIFT_DAY_CUTOFF_HOUR } from './config.js?v=20260909-21';
+import { HOUR_MS, SHIFT_DAY_CUTOFF_HOUR } from './config.js?v=20260910-39';
 
 export function parseClockOnDate(value, date) {
   if (!date) return null;
@@ -17,6 +17,7 @@ export function parseClockOnDate(value, date) {
 
 export function parseDurationHours(value) {
   const text = clean(value);
+  if (/^\d+(?:\.\d+)?$/.test(text)) return Number(text);
   const match = text.match(/(\d+):(\d{2})(?::(\d{2}))?/);
   if (!match) return 0;
   return Number(match[1]) + Number(match[2]) / 60 + Number(match[3] || 0) / 3600;
@@ -83,17 +84,18 @@ export function extractPunches(value, baseDate) {
   if (value instanceof Date) return [value];
   const text = String(value || "").trim();
   if (!text) return [];
+  const timeText = text.replace(/\s*\([+-]\d{2}:?\d{2}\)\s*/g, " ");
 
   const dateTimes = [];
   const stampRegex = /(\d{4}[-/]\d{1,2}[-/]\d{1,2})\s+(\d{1,2}:\d{2}(?::\d{2})?)/g;
   let match;
-  while ((match = stampRegex.exec(text))) {
+  while ((match = stampRegex.exec(timeText))) {
     const parsed = parseDateTime(match[1], match[2]);
     if (parsed) dateTimes.push(parsed);
   }
   if (dateTimes.length) return dateTimes.sort((a, b) => a - b);
 
-  const times = text.match(/\d{1,2}:\d{2}(?::\d{2})?/g) || [];
+  const times = timeText.match(/\d{1,2}:\d{2}(?::\d{2})?/g) || [];
   if (!times.length || !baseDate) return [];
 
   const punches = [];
@@ -111,10 +113,19 @@ export function extractPunches(value, baseDate) {
 
 export function extractPunchesFromColumns(row, timeColumns, baseDate) {
   if (!baseDate) return [];
-  return timeColumns
-    .flatMap((column) => extractPunches(row[column], baseDate))
-    .filter(Boolean)
-    .sort((a, b) => a - b);
+  const punches = [];
+  timeColumns.forEach((column) => {
+    extractPunches(row[column], baseDate).forEach((value) => {
+      let punch = value;
+      if (punches.length) {
+        while (punch <= punches[punches.length - 1]) {
+          punch = new Date(punch.getTime() + 24 * HOUR_MS);
+        }
+      }
+      punches.push(punch);
+    });
+  });
+  return punches;
 }
 
 export function parseAnyDate(value) {
@@ -124,7 +135,7 @@ export function parseAnyDate(value) {
     return new Date(epoch + value * 24 * HOUR_MS);
   }
   const text = String(value || "").trim();
-  const match = text.match(/(\d{4})[-/](\d{1,2})[-/](\d{1,2})|(\d{1,2})[-/](\d{1,2})[-/](\d{4})|(\d{1,2})[-/](\d{1,2})/);
+  const match = text.match(/(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})|(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})|(\d{1,2})[-/.](\d{1,2})/);
   if (!match) return null;
   if (match[1]) return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
   if (match[6]) return new Date(Number(match[6]), Number(match[4]) - 1, Number(match[5]));
@@ -209,19 +220,30 @@ export function formatShiftFilter(value) {
 
 export function formatPersonTimeRanges(dayRanges) {
   const sorted = [...dayRanges].sort((a, b) => a.day.localeCompare(b.day));
-  return sorted.map((item) => {
-    const ranges = item.ranges.map((range) => formatRange(range.start, range.end, item.day)).join(", ");
-    return sorted.length > 1 ? `${item.day} ${ranges}` : ranges;
-  }).join("; ");
+  return sorted.flatMap((item) => item.ranges.map((range) => {
+    const rangeText = formatRange(range.start, range.end, item.day);
+    return sorted.length > 1 ? `${item.day.slice(5)}  ${rangeText}` : rangeText;
+  })).join("\n");
 }
 
 export function formatRange(start, end, workDate) {
-  const startDate = dateKey(start);
-  const endDate = dateKey(end);
-  if (startDate === workDate && endDate === workDate) {
-    return `${formatTimeOnly(start)}-${formatTimeOnly(end)}`;
-  }
-  return `${formatMonthDayTime(start)}-${formatMonthDayTime(end)}`;
+  const startOffset = dayOffsetFromWorkDate(start, workDate);
+  const endOffset = dayOffsetFromWorkDate(end, workDate);
+  const startTime = formatTimeOnly(start);
+  const endTime = formatTimeOnly(end);
+
+  if (startOffset === 0 && endOffset === 0) return `${startTime} → ${endTime}`;
+  if (startOffset === 0 && endOffset === 1) return `${startTime} → 次日 ${endTime}`;
+  if (startOffset === 1 && endOffset === 1) return `次日 ${startTime} → ${endTime}`;
+  return `${formatMonthDayTime(start)} → ${formatMonthDayTime(end)}`;
+}
+
+export function dayOffsetFromWorkDate(date, workDate) {
+  const baseDate = parseDateOnly(workDate);
+  if (!date || Number.isNaN(baseDate.getTime())) return null;
+  const dateDay = Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
+  const workDay = Date.UTC(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate());
+  return Math.round((dateDay - workDay) / (24 * HOUR_MS));
 }
 
 export function formatTimeOnly(date) {

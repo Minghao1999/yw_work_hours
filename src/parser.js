@@ -1,5 +1,5 @@
-import { DEFAULT_START, DEFAULT_END, HOUR_MS, DEFAULT_COMPANY_OPTIONS, columnRules } from './config.js?v=20260909-21';
-import { clean, normalize, parseAnyDate, parseDateOnly, dateKey, extractPunches, parseTimesheetParts } from './utils.js?v=20260909-21';
+import { DEFAULT_START, DEFAULT_END, HOUR_MS, DEFAULT_COMPANY_OPTIONS, columnRules } from './config.js?v=20260910-39';
+import { clean, normalize, parseAnyDate, parseDateOnly, parseDurationHours, dateKey, extractPunches, parseTimesheetParts } from './utils.js?v=20260910-39';
 
 export function readWorkbookFile(file, data) {
   if (/\.csv$/i.test(file.name)) {
@@ -37,7 +37,7 @@ export function decodeCsvText(data) {
 export function mojibakeScore(text) {
   const bad = (text.match(/[�]|Ã|Â|å|æ|ä|œ|¤/g) || []).length;
   const chinese = (text.match(/[\u4e00-\u9fa5]/g) || []).length;
-  const headers = /Person Name|Clock In|Clock Out|Timesheet|人员姓名|时间表/.test(text) ? -20 : 0;
+  const headers = /Person Name|Clock In|Clock Out|Timesheet|人员姓名|时间表|Nombre de la persona|Entrada1|Salida1|Hoja de tiempo/i.test(text) ? -20 : 0;
   return bad * 10 - chinese * 2 + headers;
 }
 
@@ -115,10 +115,33 @@ export function guessColumns(columns, rows) {
     result[key] = bestHeaderColumn(columns, key, rules);
   });
   const inferred = inferColumns(columns, rows);
+  const headerPunchColumns = columns.filter((column) => isPunchColumnHeader(column));
+  const numberedPunchColumns = headerPunchColumns.filter((column) => isNumberedPunchColumnHeader(column));
   return {
     ...inferred,
+    timeColumns: numberedPunchColumns.length
+      ? numberedPunchColumns
+      : headerPunchColumns.length
+        ? headerPunchColumns
+        : inferred.timeColumns,
     ...Object.fromEntries(Object.entries(result).filter(([, value]) => value)),
   };
+}
+
+export function detectDataSource(columns, rows = []) {
+  const sourceColumn = bestHeaderColumn(columns, "dataSource", columnRules.dataSource || []);
+  if (!sourceColumn) return "machine";
+  const detected = rows
+    .map((row) => normalizeSourceValue(row[sourceColumn]))
+    .find(Boolean);
+  return detected || "paper";
+}
+
+export function normalizeSourceValue(value) {
+  const text = normalize(value);
+  if (/纸质|签到|手工|paper|manual/.test(text)) return "paper";
+  if (/打卡机|机器|machine|device|terminal/.test(text)) return "machine";
+  return "";
 }
 
 export function bestHeaderColumn(columns, key, rules) {
@@ -126,21 +149,23 @@ export function bestHeaderColumn(columns, key, rules) {
   let bestScore = 0;
   columns.forEach((column) => {
     const text = clean(column);
+    if (key === "time" && isDurationColumn(text)) return;
     const matched = rules.some((rule) => rule.test(text));
     if (!matched) return;
     let score = 10;
-    if (key === "person" && /姓名|name/i.test(text)) score += 20;
+    if (key === "person" && /姓名|name|nombre/i.test(text)) score += 20;
     if (key === "person" && /id|编号|工号/i.test(text)) score -= 20;
-    if (key === "person" && /^person name$/i.test(text)) score += 25;
-    if (key === "clockIn" && /^clock\s*in$/i.test(text)) score += 30;
-    if (key === "clockOut" && /^clock\s*out$/i.test(text)) score += 30;
-    if (key === "breakTime" && /total\s*break/i.test(text)) score += 30;
-    if (key === "timesheet" && /timesheet/i.test(text)) score += 30;
-    if (key === "shift" && /^班次$|^shift$/i.test(text)) score += 30;
-    if (key === "personId" && /person\s*id/i.test(text)) score += 30;
-    if (key === "company" && /劳务公司|服务公司|外包公司|供应商|company|vendor|agency|labor|staffing|contractor/i.test(text)) score += 25;
+    if (key === "person" && /^person name$|^nombre(?: de la persona| del empleado)?$/i.test(text)) score += 25;
+    if (key === "clockIn" && /^clock\s*in(?:\s*1)?$|^check\s*in(?:\s*1)?$|^entrada\s*1?$|^hora\s+de\s+entrada\s*1?$/i.test(text)) score += 30;
+    if (key === "clockOut" && /^clock\s*out(?:\s*1)?$|^check\s*out(?:\s*1)?$|^salida\s*1?$|^hora\s+de\s+salida\s*1?$/i.test(text)) score += 30;
+    if (key === "breakTime" && /total\s*break|total.*descanso/i.test(text)) score += 30;
+    if (key === "totalDuration" && /^总时长(?:\s*\(小时\))?$|^total\s*(?:duration|hours?)(?:\s*\((?:h|hrs?|hours?)\))?$|^tiempo\s+total(?:\s*\(horas\))?$/i.test(text)) score += 30;
+    if (key === "timesheet" && /timesheet|hoja\s+de\s+tiempo/i.test(text)) score += 30;
+    if (key === "shift" && /^班次$|^shift$|^turno$/i.test(text)) score += 30;
+    if (key === "personId" && /person\s*id|employee\s*id|id.*persona|id.*empleado/i.test(text)) score += 30;
+    if (key === "company" && /劳务公司|服务公司|外包公司|供应商|company|vendor|agency|labor|staffing|contractor|empresa|proveedor|agencia/i.test(text)) score += 25;
     if (key === "time" && /考勤记录|考勤时间|打卡时间/i.test(text)) score += 20;
-    if (key === "date" && /打卡日期|考勤日|日期/i.test(text)) score += 20;
+    if (key === "date" && /打卡日期|考勤日|日期|fecha/i.test(text)) score += 20;
     if (score > bestScore) {
       best = column;
       bestScore = score;
@@ -180,11 +205,25 @@ export function inferColumns(columns, rows) {
 }
 
 export function isDurationColumn(column) {
-  return /时长|总工作|总加班|总休息|total|duration|work\s*time|overtime|break|clock\s*time/i.test(clean(column));
+  return /时长|总工作|总加班|总休息|total|duration|work\s*time|overtime|break|clock\s*time|duraci[oó]n|descanso|tiempo\s+total/i.test(clean(column));
+}
+
+export function isPunchColumnHeader(column) {
+  const text = clean(column);
+  if (!text || isDurationColumn(text)) return false;
+  return /^(?:打卡时间|上班(?:打卡|时间)?|下班(?:打卡|时间)?|签到|签退)\s*(?:\d+|[一二三四])?$/i.test(text)
+    || /^(?:clock|check)\s*(?:in|out)\s*\d*$/i.test(text)
+    || /^(?:entrada|salida)\s*\d*$/i.test(text)
+    || /^hora\s+de\s+(?:entrada|salida)\s*\d*$/i.test(text);
+}
+
+export function isNumberedPunchColumnHeader(column) {
+  const text = clean(column);
+  return isPunchColumnHeader(text) && /(?:\d+|[一二三四])\s*$/.test(text);
 }
 
 export function scoreTimeValue(value) {
-  const text = clean(value);
+  const text = clean(value).replace(/\s*\([+-]\d{2}:?\d{2}\)\s*/g, " ");
   if (!text) return 0;
   const timeCount = (text.match(/\d{1,2}:\d{2}(?::\d{2})?/g) || []).length;
   const dateTimeCount = (text.match(/\d{4}[-/]\d{1,2}[-/]\d{1,2}\s+\d{1,2}:\d{2}/g) || []).length;
@@ -197,14 +236,14 @@ export function scoreTimeValue(value) {
 export function scoreClockValue(value) {
   const text = clean(value);
   if (!text || parseAnyDate(text)) return 0;
-  return /^\d{1,2}:\d{2}(:\d{2})?$/.test(text) ? 1 : 0;
+  return /^\d{1,2}:\d{2}(?::\d{2})?(?:\s*\([+-]\d{2}:?\d{2}\))?$/.test(text) ? 1 : 0;
 }
 
 export function scoreTimeHeader(column) {
   const text = clean(column);
-  if (/日期|date/i.test(text)) return 0;
+  if (/日期|date|fecha/i.test(text)) return 0;
   if (isDurationColumn(text)) return 0;
-  return /时间|打卡|上班|下班|签到|签退|clock|punch|time/i.test(text) ? 2 : 0;
+  return /时间|打卡|上班|下班|签到|签退|clock|punch|time|entrada|salida|fichaje|marcaje|hora/i.test(text) ? 2 : 0;
 }
 
 export function scoreDateValue(value) {
@@ -340,14 +379,14 @@ export function getTimesheetCandidates(row, columns) {
   };
 
   if (columns.timesheet) addCandidate(row[columns.timesheet]);
-  ["时间表", "Timesheet", "Time Sheet", "timesheet", "time sheet"].forEach((column) => {
+  ["时间表", "Timesheet", "Time Sheet", "timesheet", "time sheet", "Hoja de tiempo", "hoja de tiempo"].forEach((column) => {
     if (Object.prototype.hasOwnProperty.call(row, column)) addCandidate(row[column]);
   });
 
   Object.entries(row).forEach(([column, value]) => {
     const columnText = clean(column);
     const text = clean(value);
-    if (/时间表|timesheet|time\s*sheet|班次/i.test(columnText)) addCandidate(text);
+    if (/时间表|timesheet|time\s*sheet|班次|hoja\s+de\s+tiempo/i.test(columnText)) addCandidate(text);
     if (looksLikeTimesheetValue(text)) addCandidate(text);
   });
 
@@ -377,11 +416,23 @@ export function inferDateRange(rows, columns) {
   const dates = [];
   const timeColumns = Array.isArray(columns.timeColumns) ? columns.timeColumns : [];
   rows.slice(0, 2000).forEach((row) => {
+    const baseDate = columns.date ? parseAnyDate(row[columns.date]) : null;
+    const durationHours = columns.totalDuration ? parseDurationHours(row[columns.totalDuration]) : 0;
+    const clockPair = Boolean(columns.clockIn && columns.clockOut && clean(row[columns.clockIn]) && clean(row[columns.clockOut]));
+    const columnPunchCount = timeColumns.reduce((count, column) => count + extractPunches(row[column], baseDate).length, 0);
+    const mainPunchCount = columns.time ? extractPunches(row[columns.time], baseDate).length : 0;
+    const hasWorkData = durationHours > 0 || clockPair || columnPunchCount >= 2 || mainPunchCount >= 2;
+
+    let hasWorkDate = false;
     if (columns.date) {
-      const date = parseAnyDate(row[columns.date]);
-      if (date) dates.push(parseDateOnly(dateKey(date)));
+      if (baseDate && hasWorkData) {
+        dates.push(parseDateOnly(dateKey(baseDate)));
+        hasWorkDate = true;
+      }
     }
-    const sourceColumns = [columns.time, ...timeColumns].filter(Boolean);
+    if (hasWorkDate) return;
+    if (baseDate) return;
+    const sourceColumns = [columns.time, columns.clockIn, columns.clockOut, ...timeColumns].filter(Boolean);
     sourceColumns.forEach((column) => {
       extractPunches(row[column], null).forEach((date) => dates.push(parseDateOnly(dateKey(date))));
     });

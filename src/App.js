@@ -1,11 +1,13 @@
-import { DEFAULT_START, sampleRows } from './config.js?v=20260909-21';
-import { analyzeRows } from './analysis.js?v=20260909-21';
-import { Dashboard } from './components.js?v=20260909-21';
-import { clean, formatRegionName, normalize, parseTimesheetParts } from './utils.js?v=20260909-21';
-import { guessColumns, inferSiteName, inferCompanyName, getRegionOptions, getCompanyOptions, inferDateRange, readWorkbookFile, readSheet, getRowTimesheetParts, getTimesheetCandidates } from './parser.js?v=20260909-21';
+import { DEFAULT_START, sampleRows } from './config.js?v=20260910-39';
+import { analyzeRows } from './analysis.js?v=20260910-39';
+import { Dashboard } from './components.js?v=20260910-39';
+import { clean, formatRegionName, normalize, parseTimesheetParts } from './utils.js?v=20260910-39';
+import { detectDataSource, normalizeSourceValue, guessColumns, inferSiteName, inferCompanyName, getRegionOptions, getCompanyOptions, inferDateRange, readWorkbookFile, readSheet, getRowTimesheetParts, getTimesheetCandidates } from './parser.js?v=20260910-39';
+import { buildFullReport } from './export.js?v=20260910-39';
+import { databaseRecordToRow, fetchAllAttendanceRecords, saveAttendanceImport } from './api.js?v=20260910-39';
 
-const { useEffect, useMemo, useState } = React;
-const CANONICAL_BASE_COLUMNS = ["人员姓名", "人员ID", "日期", "时间表", "地区", "劳务公司", "班次", "Clock In", "Clock Out", "总休息时长", "考勤记录"];
+const { useEffect, useMemo, useRef, useState } = React;
+const CANONICAL_BASE_COLUMNS = ["数据来源", "人员姓名", "人员ID", "日期", "时间表", "地区", "劳务公司", "班次", "Clock In", "Clock Out", "Break Out 1", "Break In 1", "Break Out 2", "Break In 2", "总休息时长", "总时长", "考勤记录"];
 
 export function App() {
   const [rows, setRows] = useState(sampleRows);
@@ -16,16 +18,27 @@ export function App() {
   const [selectedDate, setSelectedDate] = useState(DEFAULT_START);
   const [selectedShift, setSelectedShift] = useState("all");
   const [analysisMode, setAnalysisMode] = useState("region");
+  const [selectedDataSource, setSelectedDataSource] = useState("machine");
+  const dataRequestVersion = useRef(0);
 
-  const guessed = useMemo(() => guessColumns(columns, rows), [columns, rows]);
-  const siteName = useMemo(() => inferSiteName(rows, guessed), [rows, guessed.personId, guessed.timesheet]);
-  const companyName = useMemo(() => inferCompanyName(rows, guessed), [rows, guessed.company, guessed.timesheet]);
-  const regionOptions = useMemo(() => getRegionOptions(rows, guessed, siteName), [rows, guessed.region, guessed.personId, guessed.timesheet, siteName]);
+  const visibleRows = useMemo(
+    () => rows.filter((row) => (row["数据来源"] === "paper" ? "paper" : "machine") === selectedDataSource),
+    [rows, selectedDataSource]
+  );
+  const sourceCounts = useMemo(() => rows.reduce((counts, row) => {
+    const source = row["数据来源"] === "paper" ? "paper" : "machine";
+    counts[source] += 1;
+    return counts;
+  }, { machine: 0, paper: 0 }), [rows]);
+  const guessed = useMemo(() => guessColumns(columns, visibleRows), [columns, visibleRows]);
+  const siteName = useMemo(() => inferSiteName(visibleRows, guessed), [visibleRows, guessed.personId, guessed.timesheet]);
+  const companyName = useMemo(() => inferCompanyName(visibleRows, guessed), [visibleRows, guessed.company, guessed.timesheet]);
+  const regionOptions = useMemo(() => getRegionOptions(visibleRows, guessed, siteName), [visibleRows, guessed.region, guessed.personId, guessed.timesheet, siteName]);
   const [selectedRegion, setSelectedRegion] = useState("");
   const [selectedCompany, setSelectedCompany] = useState("");
   const activeRegion = selectedRegion || regionOptions[0] || siteName;
-  const companyOptions = useMemo(() => getCompanyOptions(rows, guessed, companyName, activeRegion), [rows, guessed.region, guessed.company, guessed.personId, guessed.timesheet, companyName, activeRegion]);
-  const dateRange = useMemo(() => inferDateRange(rows, guessed), [rows, guessed.date, guessed.time, guessed.timeColumns.join("|"), guessed.clockIn, guessed.clockOut]);
+  const companyOptions = useMemo(() => getCompanyOptions(visibleRows, guessed, companyName, activeRegion), [visibleRows, guessed.region, guessed.company, guessed.personId, guessed.timesheet, companyName, activeRegion]);
+  const dateRange = useMemo(() => inferDateRange(visibleRows, guessed), [visibleRows, guessed.date, guessed.time, guessed.timeColumns.join("|"), guessed.clockIn, guessed.clockOut, guessed.totalDuration]);
   const activeRange = mode === "day"
     ? { start: selectedDate, end: selectedDate }
     : dateRange;
@@ -36,22 +49,33 @@ export function App() {
     : analysisMode === "company"
       ? formatRegionName(activeRegion)
       : `${formatRegionName(activeRegion)} · ${activeCompany || "未识别劳务公司"}`;
-  const hasRows = rows.length > 0;
-  const canAnalyze = Boolean(guessed.person && ((guessed.clockIn && guessed.clockOut) || guessed.time || guessed.timeColumns.length));
+  const hasStoredRows = rows.length > 0;
+  const hasRows = visibleRows.length > 0;
+  const canAnalyze = Boolean(guessed.person && ((guessed.clockIn && guessed.clockOut) || guessed.time || guessed.timeColumns.length || guessed.totalDuration));
+  const fullReport = useMemo(
+    () => canAnalyze ? buildFullReport(visibleRows, guessed, {
+      regions: regionOptions,
+      fallbackRegion: siteName,
+      startDate: dateRange.start,
+      endDate: dateRange.end,
+    }) : { regionSummaries: [], companySummaries: [], peopleByRegion: [] },
+    [visibleRows, guessed.person, guessed.region, guessed.company, guessed.personId, guessed.date, guessed.time, guessed.timeColumns.join("|"), guessed.clockIn, guessed.clockOut, guessed.totalDuration, guessed.timesheet, regionOptions.join("|"), siteName, dateRange.start, dateRange.end, canAnalyze]
+  );
 
   const analysis = useMemo(
-    () => analyzeRows(rows, guessed, {
+    () => analyzeRows(visibleRows, guessed, {
       region: activeRegion,
       company: activeCompany,
       shift: effectiveShift,
       fallbackRegion: siteName,
       fallbackCompany: companyName,
+      sourceType: selectedDataSource,
     }, activeRange.start, activeRange.end),
-    [rows, guessed.person, guessed.region, guessed.company, guessed.personId, guessed.date, guessed.time, guessed.timeColumns.join("|"), guessed.clockIn, guessed.clockOut, guessed.breakTime, guessed.timesheet, activeRegion, activeCompany, effectiveShift, siteName, companyName, activeRange.start, activeRange.end]
+    [visibleRows, guessed.person, guessed.region, guessed.company, guessed.personId, guessed.date, guessed.time, guessed.timeColumns.join("|"), guessed.clockIn, guessed.clockOut, guessed.breakTime, guessed.paperBreakOut1, guessed.paperBreakIn1, guessed.paperBreakOut2, guessed.paperBreakIn2, guessed.totalDuration, guessed.timesheet, activeRegion, activeCompany, effectiveShift, selectedDataSource, siteName, companyName, activeRange.start, activeRange.end]
   );
 
   const comparison = useMemo(
-    () => buildComparison(rows, guessed, {
+    () => buildComparison(visibleRows, guessed, {
       regions: regionOptions,
       companies: companyOptions,
       selectedRegion: activeRegion,
@@ -62,8 +86,9 @@ export function App() {
       startDate: activeRange.start,
       endDate: activeRange.end,
       canAnalyze,
+      sourceType: selectedDataSource,
     }),
-    [rows, guessed.person, guessed.region, guessed.company, guessed.personId, guessed.date, guessed.time, guessed.timeColumns.join("|"), guessed.clockIn, guessed.clockOut, guessed.breakTime, guessed.timesheet, regionOptions.join("|"), companyOptions.join("|"), activeRegion, activeCompany, effectiveShift, siteName, companyName, activeRange.start, activeRange.end, canAnalyze]
+    [visibleRows, guessed.person, guessed.region, guessed.company, guessed.personId, guessed.date, guessed.time, guessed.timeColumns.join("|"), guessed.clockIn, guessed.clockOut, guessed.breakTime, guessed.paperBreakOut1, guessed.paperBreakIn1, guessed.paperBreakOut2, guessed.paperBreakIn2, guessed.totalDuration, guessed.timesheet, regionOptions.join("|"), companyOptions.join("|"), activeRegion, activeCompany, effectiveShift, selectedDataSource, siteName, companyName, activeRange.start, activeRange.end, canAnalyze]
   );
 
   useEffect(() => {
@@ -87,9 +112,65 @@ export function App() {
     }
   }, [dateRange.start, dateRange.end, selectedDate]);
 
+  useEffect(() => {
+    const requestVersion = ++dataRequestVersion.current;
+    let cancelled = false;
+    setNotice("正在从 MongoDB 读取考勤数据…");
+
+    fetchAllAttendanceRecords()
+      .then((records) => {
+        if (cancelled || requestVersion !== dataRequestVersion.current) return;
+        if (!records.length) {
+          setNotice("MongoDB 已连接，目前还没有保存的考勤数据");
+          return;
+        }
+
+        const databaseRows = dedupeRows(records.map(databaseRecordToRow));
+        const availableSources = new Set(databaseRows.map((row) => row["数据来源"] === "paper" ? "paper" : "machine"));
+        const nextSource = availableSources.has("machine") ? "machine" : "paper";
+        const sourceRows = databaseRows.filter((row) => (row["数据来源"] === "paper" ? "paper" : "machine") === nextSource);
+        const maxTimeColumns = databaseRows.reduce((maximum, row) => Math.max(
+          maximum,
+          Object.keys(row).filter((column) => /^打卡时间\d+$/.test(column)).length
+        ), 0);
+        const mergedColumns = [
+          ...CANONICAL_BASE_COLUMNS,
+          ...Array.from({ length: maxTimeColumns }, (_, index) => `打卡时间${index + 1}`),
+        ];
+        const databaseColumns = guessColumns(mergedColumns, sourceRows);
+        const databaseSite = inferSiteName(sourceRows, databaseColumns);
+        const databaseCompany = inferCompanyName(sourceRows, databaseColumns);
+        const nextRegions = getRegionOptions(sourceRows, databaseColumns, databaseSite);
+        const nextRegion = nextRegions[0] || databaseSite;
+        const nextCompanies = getCompanyOptions(sourceRows, databaseColumns, databaseCompany, nextRegion);
+        const nextDateRange = inferDateRange(sourceRows, databaseColumns);
+
+        setRows(databaseRows);
+        setColumns(mergedColumns);
+        setSelectedDataSource(nextSource);
+        setSelectedRegion(nextRegion);
+        setSelectedCompany(nextCompanies[0] || databaseCompany);
+        setSelectedShift("all");
+        setAnalysisMode("region");
+        setMode("day");
+        setSelectedDate(nextDateRange.end);
+        setFileName(`MongoDB · ${databaseRows.length} 条记录`);
+        setNotice(`已从 MongoDB 加载 ${databaseRows.length} 条考勤记录，当前显示${nextSource === "paper" ? "纸质表" : "打卡机"}数据 ${nextDateRange.end}`);
+      })
+      .catch((error) => {
+        if (cancelled || requestVersion !== dataRequestVersion.current) return;
+        setNotice(`无法从 MongoDB 读取数据：${error.message}`);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   async function handleFile(event) {
     const files = Array.from(event.target.files || []);
     if (!files.length) return;
+    dataRequestVersion.current += 1;
     setNotice("");
     try {
       const imports = [];
@@ -101,11 +182,13 @@ export function App() {
         const imported = readSheet(sheet);
         if (imported.rows.length) {
           const fileColumns = guessColumns(imported.columns, imported.rows);
+          const sourceType = detectDataSource(imported.columns, imported.rows);
           maxTimeColumns = Math.max(maxTimeColumns, fileColumns.timeColumns.length || 0);
           imports.push({
             file,
+            sourceType,
             ...imported,
-            rows: normalizeImportedRows(imported.rows, fileColumns),
+            rows: normalizeImportedRows(imported.rows, fileColumns, sourceType),
           });
         }
       }
@@ -113,18 +196,27 @@ export function App() {
       const importedRows = imports.flatMap((item) => item.rows);
       if (!importedRows.length) throw new Error("表格第一张 sheet 没有可读取的数据");
       const parsed = dedupeRows(importedRows);
+      const combinedRows = dedupeRows([...rows, ...parsed]);
+      maxTimeColumns = Math.max(maxTimeColumns, combinedRows.reduce((maximum, row) => Math.max(
+        maximum,
+        Object.keys(row).filter((column) => /^打卡时间\d+$/.test(column)).length
+      ), 0));
+      const importedSources = [...new Set(imports.map((item) => item.sourceType))];
+      const nextSource = importedSources.length === 1 ? importedSources[0] : importedSources[0] || "machine";
+      const sourceRows = parsed.filter((row) => (row["数据来源"] === "paper" ? "paper" : "machine") === nextSource);
       const mergedColumns = [
         ...CANONICAL_BASE_COLUMNS,
         ...Array.from({ length: maxTimeColumns }, (_, index) => `打卡时间${index + 1}`),
       ];
-      const importedColumns = guessColumns(mergedColumns, parsed);
-      const importedSite = inferSiteName(parsed, importedColumns);
-      const importedCompany = inferCompanyName(parsed, importedColumns);
-      const nextRegions = getRegionOptions(parsed, importedColumns, importedSite);
+      const importedColumns = guessColumns(mergedColumns, sourceRows);
+      const importedSite = inferSiteName(sourceRows, importedColumns);
+      const importedCompany = inferCompanyName(sourceRows, importedColumns);
+      const nextRegions = getRegionOptions(sourceRows, importedColumns, importedSite);
       const nextRegion = nextRegions[0] || importedSite;
-      const nextCompanies = getCompanyOptions(parsed, importedColumns, importedCompany, nextRegion);
-      setRows(parsed);
+      const nextCompanies = getCompanyOptions(sourceRows, importedColumns, importedCompany, nextRegion);
+      setRows(combinedRows);
       setColumns(mergedColumns);
+      setSelectedDataSource(nextSource);
       setSelectedRegion(nextRegion);
       setSelectedCompany(nextCompanies[0] || importedCompany);
       setSelectedShift("all");
@@ -132,12 +224,21 @@ export function App() {
       const nextFileNames = [...new Set(files.map((file) => file.name))];
       setFileName(nextFileNames.length === 1 ? nextFileNames[0] : `${nextFileNames.length} 个文件`);
       event.target.value = "";
+      try {
+        const saved = await saveAttendanceImport(nextFileNames, parsed);
+        setNotice(saved.duplicate
+          ? `数据库中已有相同数据，共 ${saved.recordCount} 条，未重复保存`
+          : `已保存到 MongoDB，共 ${saved.recordCount} 条考勤记录`);
+      } catch (saveError) {
+        setNotice(`报表已在页面中打开，但没有保存到 MongoDB：${saveError.message}`);
+      }
     } catch (error) {
       setNotice(error.message || "文件解析失败，请确认是 .xlsx、.xls 或 .csv 文件");
     }
   }
 
   function clearData() {
+    dataRequestVersion.current += 1;
     setRows([]);
     setColumns([]);
     setFileName("未上传文件");
@@ -145,6 +246,7 @@ export function App() {
     setSelectedRegion("");
     setSelectedCompany("");
     setSelectedShift("all");
+    setSelectedDataSource("machine");
     setAnalysisMode("region");
     setMode("week");
     setSelectedDate(DEFAULT_START);
@@ -207,7 +309,7 @@ export function App() {
               React.createElement("small", null, "支持 Excel / CSV，可一次选择多个文件")
             )
           ),
-          hasRows ? React.createElement(
+          hasStoredRows ? React.createElement(
             "button",
             {
               type: "button",
@@ -217,6 +319,37 @@ export function App() {
             "清空"
           ) : null
         ),
+        hasStoredRows ? React.createElement(
+          "div",
+          { className: "sourceSelector", role: "group", "aria-label": "选择数据来源" },
+          React.createElement("span", null, "数据来源"),
+          React.createElement(
+            "div",
+            { className: "segmented sourceSegmented" },
+            React.createElement("button", {
+              type: "button",
+              className: selectedDataSource === "machine" ? "active" : "",
+              disabled: sourceCounts.machine === 0,
+              onClick: () => {
+                setSelectedDataSource("machine");
+                setSelectedRegion("");
+                setSelectedCompany("");
+                setNotice(`当前显示打卡机数据，共 ${sourceCounts.machine} 条；休息时长显示为 -`);
+              },
+            }, `打卡机数据 ${sourceCounts.machine}`),
+            React.createElement("button", {
+              type: "button",
+              className: selectedDataSource === "paper" ? "active" : "",
+              disabled: sourceCounts.paper === 0,
+              onClick: () => {
+                setSelectedDataSource("paper");
+                setSelectedRegion("");
+                setSelectedCompany("");
+                setNotice(`当前显示纸质表数据，共 ${sourceCounts.paper} 条；休息时长为两段休息之和`);
+              },
+            }, `纸质表数据 ${sourceCounts.paper}`),
+          )
+        ) : null,
       )
     ),
     notice ? React.createElement("div", { className: "notice" }, notice) : null,
@@ -257,12 +390,17 @@ export function App() {
           dateRange,
           activeRange,
           comparison,
+          fullReport,
         }) : null
   );
 }
 
-function normalizeImportedRows(rows, columns) {
+function normalizeImportedRows(rows, columns, sourceType = "machine") {
   return rows.map((row) => {
+    const rowSourceType = columns.dataSource
+      ? normalizeSourceValue(row[columns.dataSource]) || sourceType
+      : sourceType;
+    const hasPunchSequence = rowSourceType === "machine" && (columns.timeColumns || []).length >= 2;
     const timesheetCandidates = getTimesheetCandidates(row, columns);
     const timesheetText = clean(columns.timesheet ? row[columns.timesheet] : "") || timesheetCandidates[0] || "";
     const detectedTimesheetParts = getRowTimesheetParts(row, columns);
@@ -273,6 +411,7 @@ function normalizeImportedRows(rows, columns) {
       shift: detectedTimesheetParts.shift || parsedTimesheetParts.shift,
     };
     const normalized = {
+      "数据来源": rowSourceType,
       "人员姓名": columns.person ? row[columns.person] : "",
       "人员ID": columns.personId ? row[columns.personId] : "",
       "日期": columns.date ? row[columns.date] : "",
@@ -280,14 +419,21 @@ function normalizeImportedRows(rows, columns) {
       "地区": timesheetParts.region || (columns.region ? row[columns.region] : ""),
       "劳务公司": timesheetParts.company || (columns.company ? row[columns.company] : ""),
       "班次": timesheetParts.shift,
-      "Clock In": columns.clockIn ? row[columns.clockIn] : "",
-      "Clock Out": columns.clockOut ? row[columns.clockOut] : "",
-      "总休息时长": columns.breakTime ? row[columns.breakTime] : "",
-      "考勤记录": columns.time ? row[columns.time] : "",
+      "Clock In": !hasPunchSequence && columns.clockIn ? row[columns.clockIn] : "",
+      "Clock Out": !hasPunchSequence && columns.clockOut ? row[columns.clockOut] : "",
+      "Break Out 1": columns.paperBreakOut1 ? row[columns.paperBreakOut1] : "",
+      "Break In 1": columns.paperBreakIn1 ? row[columns.paperBreakIn1] : "",
+      "Break Out 2": columns.paperBreakOut2 ? row[columns.paperBreakOut2] : "",
+      "Break In 2": columns.paperBreakIn2 ? row[columns.paperBreakIn2] : "",
+      "总休息时长": rowSourceType === "machine" && columns.breakTime ? row[columns.breakTime] : "",
+      "总时长": columns.totalDuration ? row[columns.totalDuration] : "",
+      "考勤记录": rowSourceType === "machine" && columns.time ? row[columns.time] : "",
     };
-    (columns.timeColumns || []).forEach((column, index) => {
-      normalized[`打卡时间${index + 1}`] = row[column];
-    });
+    if (rowSourceType === "machine") {
+      (columns.timeColumns || []).forEach((column, index) => {
+        normalized[`打卡时间${index + 1}`] = row[column];
+      });
+    }
     return normalized;
   });
 }
@@ -326,6 +472,7 @@ function buildComparison(rows, columns, config) {
       shift: config.selectedShift,
       fallbackRegion: config.fallbackRegion,
       fallbackCompany: "",
+      sourceType: config.sourceType,
     })),
     companies: config.companies.map((company) => summarize(company, {
       region: config.selectedRegion,
@@ -333,6 +480,7 @@ function buildComparison(rows, columns, config) {
       shift: config.selectedShift,
       fallbackRegion: config.fallbackRegion,
       fallbackCompany: config.fallbackCompany,
+      sourceType: config.sourceType,
     })),
   };
 }

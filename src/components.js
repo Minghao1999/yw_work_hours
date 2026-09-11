@@ -1,12 +1,16 @@
-import { daysBetween, formatDuration, formatRegionName } from './utils.js?v=20260909-21';
+import { daysBetween, formatDuration, formatRegionName } from './utils.js?v=20260910-39';
+import { buildFullReportFileName, downloadFullReportWorkbook } from './export.js?v=20260910-39';
 
 const { useState } = React;
 
-export function Dashboard({ analysis, siteName, companyName, analysisMode, setAnalysisMode, regionOptions, companyOptions, selectedRegion, setSelectedRegion, selectedCompany, setSelectedCompany, selectedShift, setSelectedShift, mode, setMode, selectedDate, setSelectedDate, dateRange, activeRange, comparison }) {
+export function Dashboard({ analysis, siteName, companyName, analysisMode, setAnalysisMode, regionOptions, companyOptions, selectedRegion, setSelectedRegion, selectedCompany, setSelectedCompany, selectedShift, setSelectedShift, mode, setMode, selectedDate, setSelectedDate, dateRange, activeRange, comparison, fullReport }) {
   const overtimeRate = analysis.totalWork ? (analysis.totalOvertime / analysis.totalWork) * 100 : 0;
   const isDay = mode === "day";
   const avgHours = analysis.people.length ? analysis.totalWork / analysis.people.length : 0;
   const scopeName = `${formatRegionName(siteName)} ${companyName || "未识别劳务公司"}`;
+  const downloadFileName = buildFullReportFileName(dateRange.start, dateRange.end);
+  const handleFullReportDownload = () => downloadFullReportWorkbook(fullReport, downloadFileName);
+  const canDownload = Boolean(fullReport && fullReport.regionSummaries && fullReport.regionSummaries.length);
   const personView = React.createElement(
     React.Fragment,
     null,
@@ -43,9 +47,14 @@ export function Dashboard({ analysis, siteName, companyName, analysisMode, setAn
             ),
             React.createElement(
               "div",
-              { className: "legend" },
-              React.createElement("span", null, React.createElement("i", { className: "barWork" }), "工作时长"),
-              React.createElement("span", null, React.createElement("i", { className: "barOvertime" }), "加班时长")
+              { className: "sectionActions" },
+              React.createElement(
+                "div",
+                { className: "legend" },
+                React.createElement("span", null, React.createElement("i", { className: "barWork" }), "工作时长"),
+                React.createElement("span", null, React.createElement("i", { className: "barOvertime" }), "加班时长")
+              ),
+              React.createElement(DownloadButton, { onClick: handleFullReportDownload, disabled: !canDownload })
             )
           ),
           React.createElement(AdaptiveWorkTable, { data: analysis.people, selectedShift, setSelectedShift })
@@ -57,11 +66,13 @@ export function Dashboard({ analysis, siteName, companyName, analysisMode, setAn
         title: "地区工时对比",
         subtitle: "汇总各地区全部劳务公司的数据",
         rows: comparison.regions,
+        onDownload: handleFullReportDownload,
       })
     : React.createElement(ComparisonCard, {
         title: `${formatRegionName(siteName)} 劳务公司对比`,
         subtitle: "同一地区内按劳务公司汇总",
         rows: comparison.companies,
+        onDownload: handleFullReportDownload,
       });
 
   return React.createElement(
@@ -147,7 +158,7 @@ export function ComparisonSection({ comparison, siteName, companyName }) {
   );
 }
 
-export function ComparisonCard({ title, subtitle, rows }) {
+export function ComparisonCard({ title, subtitle, rows, onDownload }) {
   const maxWork = Math.max(1, ...rows.map((row) => row.totalWork));
   return React.createElement(
     "div",
@@ -156,17 +167,18 @@ export function ComparisonCard({ title, subtitle, rows }) {
       "div",
       { className: "comparisonHead" },
       React.createElement("h2", null, title),
-      React.createElement(
-        "div",
-        { className: "comparisonHeadAside" },
-        React.createElement("span", null, subtitle),
+        React.createElement(
+          "div",
+          { className: "comparisonHeadAside" },
+          React.createElement("span", null, subtitle),
         React.createElement(
           "div",
           { className: "comparisonLegend", "aria-label": "工时颜色说明" },
           React.createElement("span", null, React.createElement("i", { className: "comparisonLegendWork" }), "正常工时"),
           React.createElement("span", null, React.createElement("i", { className: "comparisonLegendOvertime" }), "加班")
+          ),
+          onDownload ? React.createElement(DownloadButton, { onClick: onDownload, disabled: !rows.length }) : null
         )
-      )
     ),
     React.createElement(
       "div",
@@ -199,6 +211,19 @@ export function ComparisonCard({ title, subtitle, rows }) {
         );
       }) : React.createElement("div", { className: "emptyCompare" }, "暂无可对比数据")
     )
+  );
+}
+
+export function DownloadButton({ onClick, disabled }) {
+  return React.createElement(
+    "button",
+    {
+      type: "button",
+      className: "downloadButton",
+      onClick,
+      disabled,
+    },
+    "下载完整报表"
   );
 }
 
@@ -330,9 +355,10 @@ export function AdaptiveWorkTable({ data, selectedShift, setSelectedShift }) {
               )
             )
           ),
-          React.createElement("th", null, "上班时间"),
+          React.createElement("th", { className: "timeHead" }, "上班时间"),
           React.createElement("th", { className: "workHoursHead" }, "工作时长"),
           React.createElement("th", { className: "overtimeHoursHead" }, "加班时长"),
+          React.createElement("th", { className: "breakHoursHead" }, "休息时长"),
           React.createElement("th", { className: "num" }, "工作日"),
           React.createElement("th", { className: "num" }, "打卡次数"),
           React.createElement("th", { className: "num" }, "未配对")
@@ -356,13 +382,14 @@ export function AdaptiveWorkTable({ data, selectedShift, setSelectedShift }) {
             regularMax: workMax,
           })),
           React.createElement("td", { className: "overtimeHoursCell overtimeNumber" }, formatDuration(item.overtimeHours)),
+          React.createElement("td", { className: "breakHoursCell" }, formatBreakDuration(item.breakHours)),
           React.createElement("td", { className: "num" }, item.workDays),
           React.createElement("td", { className: "num" }, item.punchCount || 0),
           React.createElement("td", { className: "num" }, item.unmatchedCount || 0)
         )) : React.createElement(
           "tr",
           null,
-          React.createElement("td", { className: "emptyRow", colSpan: 8 }, "没有匹配到该班次的数据")
+          React.createElement("td", { className: "emptyRow", colSpan: 9 }, "没有匹配到该班次的数据")
         )
       )
     ),
@@ -378,12 +405,17 @@ export function AdaptiveWorkTable({ data, selectedShift, setSelectedShift }) {
       React.createElement("strong", null, tooltip.item.person),
       React.createElement("span", null, `工作时长：${formatDuration(tooltip.item.totalHours)}`),
       React.createElement("span", null, `加班时长：${formatDuration(tooltip.item.overtimeHours)}`),
+      React.createElement("span", null, `休息时长：${formatBreakDuration(tooltip.item.breakHours)}`),
       React.createElement("span", null, `工作日：${tooltip.item.workDays} 天`),
       React.createElement("span", null, `上班时间：${tooltip.item.timeText || "-"}`),
       React.createElement("span", null, `打卡次数：${tooltip.item.punchCount || 0}`),
       React.createElement("span", null, `未配对打卡：${tooltip.item.unmatchedCount || 0}`)
     ) : null
   );
+}
+
+function formatBreakDuration(value) {
+  return value == null ? "-" : formatDuration(value);
 }
 
 export function WorkInlineBar({ value, regularMax }) {

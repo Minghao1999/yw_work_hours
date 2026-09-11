@@ -207,6 +207,26 @@ summary:focus-visible {
 }
 
 .clearButton:hover { border-color: #aebbd0; background: #f7f9fc; color: var(--navy); }
+
+.sourceSelector {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #edf1f6;
+}
+
+.sourceSelector > span {
+  color: #536176;
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.sourceSegmented { margin-left: auto; }
+
 .viewControls { display: grid; align-content: center; gap: 8px; }
 .filterTitle { color: #6c7a90; font-size: 12px; font-weight: 850; letter-spacing: 0.05em; }
 .analysisFilters {
@@ -279,6 +299,11 @@ summary:focus-visible {
 }
 
 .segmented button:hover, .compareTabs button:hover { color: var(--navy); }
+
+.segmented button:disabled {
+  color: #a8b1c0;
+  cursor: not-allowed;
+}
 
 .segmented button.active, .compareTabs button.active {
   background: #fff;
@@ -519,6 +544,28 @@ summary:focus-visible {
   white-space: nowrap;
 }
 
+.sectionActions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.downloadButton {
+  min-height: 38px;
+  padding: 8px 14px;
+  border: 1px solid #245ee8;
+  border-radius: 9px;
+  background: #245ee8;
+  color: #fff;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.downloadButton:hover:not(:disabled) { background: #1749bd; }
+.downloadButton:disabled { cursor: not-allowed; opacity: 0.45; }
+
 .legend i { display: inline-block; width: 9px; height: 9px; margin-right: 5px; border-radius: 3px; }
 .barWork, .workFill { background: #3f75e8; }
 .barOvertime, .overtimeFill, .workOvertimeFill { background: var(--orange); }
@@ -606,17 +653,22 @@ summary:focus-visible {
 
 .tableShiftControl select:hover { border-color: #9fb0c8; }
 
-.timeCell {
+.timeHead, .timeCell {
   width: 245px;
   max-width: 245px;
+}
+
+.timeCell {
   overflow: hidden;
   color: #59677a;
   font-variant-numeric: tabular-nums;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.5;
+  white-space: pre;
 }
 
 .workHoursHead, .workHoursCell { width: 280px; }
+.breakHoursHead, .breakHoursCell { width: 100px; text-align: center !important; }
+.breakHoursCell { color: #59677a; font-weight: 800; font-variant-numeric: tabular-nums; }
 .overtimeHoursHead, .overtimeHoursCell { width: 110px; text-align: center !important; }
 .overtimeNumber { color: #b25719; font-weight: 800; font-variant-numeric: tabular-nums; }
 
@@ -675,7 +727,7 @@ td.num, th.num { width: 88px; text-align: right; font-variant-numeric: tabular-n
 }
 
 .chartTooltip strong { margin-bottom: 2px; font-size: 13px; }
-.chartTooltip span { color: #d9e3f0; }
+.chartTooltip span { color: #d9e3f0; white-space: pre-line; }
 .comparisonCard { padding: 20px; }
 
 .comparisonHead {
@@ -823,6 +875,8 @@ td.num, th.num { width: 88px; text-align: right; font-variant-numeric: tabular-n
 
   .fileButton, .clearButton { width: 100%; }
   .fileMeta { text-align: center; }
+  .sourceSelector { align-items: stretch; flex-direction: column; }
+  .sourceSegmented { margin-left: 0; }
   .filterGroup { grid-template-columns: 1fr; }
   .segmented, .compareTabs { width: 100%; }
   .segmented button, .compareTabs button { flex: 1; padding-right: 8px; padding-left: 8px; }
@@ -832,6 +886,8 @@ td.num, th.num { width: 88px; text-align: right; font-variant-numeric: tabular-n
   .dateBadge { width: fit-content; }
   .section { padding: 16px 14px 8px; }
   .legend { flex-wrap: wrap; }
+  .sectionActions { align-items: flex-start; flex-direction: column; }
+  .downloadButton { width: 100%; }
   .comparisonHead { align-items: flex-start; flex-direction: column; }
   .comparisonHeadAside { justify-items: start; }
   .comparisonRow { grid-template-columns: 92px minmax(100px, 1fr); }

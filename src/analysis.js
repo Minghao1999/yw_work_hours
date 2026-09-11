@@ -1,10 +1,10 @@
-import { DAILY_BREAK_HOURS, HOUR_MS } from './config.js?v=20260909-21';
-import { clean, normalize, formatDuration, parseAnyDate, parseClockOnDate, parseDurationHours, inferShiftLabelFromStart, matchesShiftFilter, addUnmatched, addPunchCount, extractPunches, extractPunchesFromColumns, parseDateOnly, dateKey, shiftDateKey, formatPersonTimeRanges } from './utils.js?v=20260909-21';
-import { getRowRegion, getRowCompany, getRowTimesheetParts } from './parser.js?v=20260909-21';
+import { HOUR_MS } from './config.js?v=20260910-39';
+import { clean, normalize, formatDuration, parseAnyDate, parseClockOnDate, parseDurationHours, inferShiftLabelFromStart, matchesShiftFilter, addUnmatched, addPunchCount, extractPunches, extractPunchesFromColumns, parseDateOnly, dateKey, shiftDateKey, formatPersonTimeRanges } from './utils.js?v=20260910-39';
+import { getRowRegion, getRowCompany, getRowTimesheetParts } from './parser.js?v=20260910-39';
 
 export function analyzeRows(rows, columns, filters, startDate, endDate) {
   const timeColumns = Array.isArray(columns.timeColumns) ? columns.timeColumns : [];
-  if (!columns.person || (!(columns.clockIn && columns.clockOut) && !columns.time && timeColumns.length < 1)) {
+  if (!columns.person || (!(columns.clockIn && columns.clockOut) && !columns.time && timeColumns.length < 1 && !columns.totalDuration)) {
     return { people: [], totalWork: 0, totalOvertime: 0, shiftCount: 0, dayCount: 0 };
   }
 
@@ -16,10 +16,14 @@ export function analyzeRows(rows, columns, filters, startDate, endDate) {
   const unmatchedByPersonDay = new Map();
   const regionNeedle = normalize(filters.region);
   const companyNeedle = normalize(filters.company);
+  const sourceNeedle = normalize(filters.sourceType);
   const shiftNeedle = filters.shift || "all";
   const shifts = [];
+  const durationEntries = [];
 
   rows.forEach((row) => {
+    const rowSourceType = normalizeDataSource(row["数据来源"]);
+    if (sourceNeedle && rowSourceType !== sourceNeedle) return;
     if (regionNeedle && normalize(getRowRegion(row, columns, filters.fallbackRegion)) !== regionNeedle) return;
     if (companyNeedle && normalize(getRowCompany(row, columns, filters.fallbackCompany)) !== companyNeedle) return;
 
@@ -27,20 +31,41 @@ export function analyzeRows(rows, columns, filters, startDate, endDate) {
     if (!person) return;
 
     const baseDate = columns.date ? parseAnyDate(row[columns.date]) : null;
-    if (columns.clockIn && columns.clockOut) {
-      const shift = buildClockInOutShift(row, columns, person, baseDate);
+    const rowShiftLabel = getRowTimesheetParts(row, columns).shift;
+    if (rowSourceType === "paper" && columns.clockIn && columns.clockOut) {
+      const paperShift = buildClockInOutShift(row, columns, person, baseDate, rowSourceType);
+      if (paperShift) {
+        shifts.push(paperShift);
+        addPunchCount(punchCountByPersonDay, person, paperShift.workDate, paperShift.punchCount);
+        return;
+      }
+    }
+    const rowTimeColumns = timeColumns.length > 1 ? timeColumns : [];
+    if (!rowTimeColumns.length && columns.clockIn && columns.clockOut) {
+      const shift = buildClockInOutShift(row, columns, person, baseDate, rowSourceType);
       if (shift) {
         shifts.push(shift);
         addPunchCount(punchCountByPersonDay, person, shift.workDate, shift.punchCount);
+        return;
       }
-      return;
     }
 
-    const rowTimeColumns = timeColumns.length > 1 ? timeColumns : [];
     const multiColumnPunches = rowTimeColumns.length ? extractPunchesFromColumns(row, rowTimeColumns, baseDate) : [];
     const mainPunches = columns.time ? extractPunches(row[columns.time], baseDate) : [];
     const punches = multiColumnPunches.length ? multiColumnPunches : mainPunches;
-    if (!punches.length) return;
+    if (!punches.length) {
+      const durationHours = columns.totalDuration ? parseDurationHours(row[columns.totalDuration]) : 0;
+      if (baseDate && Number.isFinite(durationHours) && durationHours > 0 && durationHours <= 24) {
+        durationEntries.push({
+          person,
+          workDate: dateKey(baseDate),
+          hours: durationHours,
+          shiftLabel: rowShiftLabel,
+          sourceType: rowSourceType,
+        });
+      }
+      return;
+    }
 
     if (punches.length >= 2) {
       addPunchCount(punchCountByPersonDay, person, shiftDateKey(punches[0]), punches.length);
@@ -50,6 +75,7 @@ export function analyzeRows(rows, columns, filters, startDate, endDate) {
           workDate: shiftDateKey(punches[index]),
           start: punches[index],
           end: punches[index + 1],
+          shiftLabel: rowShiftLabel,
         });
       }
       if (punches.length % 2 === 1) {
@@ -81,16 +107,31 @@ export function analyzeRows(rows, columns, filters, startDate, endDate) {
       endTime = new Date(endTime.getTime() + 24 * HOUR_MS);
     }
 
-    const hours = Math.max(0, (endTime - shift.start) / HOUR_MS);
+    const grossHours = Math.max(0, (endTime - shift.start) / HOUR_MS);
+    const breakHours = shift.sourceType === "paper" ? Math.max(0, shift.breakHours || 0) : 0;
+    const hours = Math.max(0, grossHours - breakHours);
     if (!Number.isFinite(hours) || hours <= 0 || hours > 18) return;
     const shiftLabel = shift.shiftLabel || inferShiftLabelFromStart(shift.start);
     if (!matchesShiftFilter(shiftLabel, shiftNeedle)) return;
     const key = `${shift.person}__${workDate}`;
-    const current = byPersonDay.get(key) || { person: shift.person, day: workDate, totalHours: 0, segmentCount: 0, shiftLabels: new Set(), timeRanges: [] };
+    const current = byPersonDay.get(key) || { person: shift.person, day: workDate, totalHours: 0, breakHours: 0, sourceType: shift.sourceType || "machine", segmentCount: 0, shiftLabels: new Set(), timeRanges: [] };
     current.totalHours += hours;
+    current.breakHours += breakHours;
     current.segmentCount += 1;
     if (shiftLabel) current.shiftLabels.add(shiftLabel);
     current.timeRanges.push({ start: shift.start, end: endTime });
+    byPersonDay.set(key, current);
+  });
+
+  durationEntries.forEach((entry) => {
+    const dateForFilter = parseDateOnly(entry.workDate);
+    if (dateForFilter < start || dateForFilter > end) return;
+    const shiftLabel = entry.shiftLabel || "";
+    if (!matchesShiftFilter(shiftLabel, shiftNeedle)) return;
+    const key = `${entry.person}__${entry.workDate}`;
+    if (byPersonDay.has(key)) return;
+    const current = { person: entry.person, day: entry.workDate, totalHours: entry.hours, breakHours: 0, sourceType: entry.sourceType || "machine", segmentCount: 1, shiftLabels: new Set(), timeRanges: [], durationOnly: true };
+    if (shiftLabel) current.shiftLabels.add(shiftLabel);
     byPersonDay.set(key, current);
   });
 
@@ -112,12 +153,15 @@ export function analyzeRows(rows, columns, filters, startDate, endDate) {
 
   const peopleMap = new Map();
   [...byPersonDay.values()].forEach((dayRow) => {
-    dayRow.totalHours = Math.max(0, dayRow.totalHours - DAILY_BREAK_HOURS);
+    const isPaper = dayRow.sourceType === "paper";
+    dayRow.breakHours = isPaper ? dayRow.breakHours || 0 : null;
     dayRow.overtimeHours = Math.max(0, dayRow.totalHours - 8);
     const personRow = peopleMap.get(dayRow.person) || {
       person: dayRow.person,
       totalHours: 0,
       overtimeHours: 0,
+      breakHours: isPaper ? 0 : null,
+      sourceType: dayRow.sourceType,
       workDays: 0,
       segmentCount: 0,
       punchCount: 0,
@@ -128,6 +172,7 @@ export function analyzeRows(rows, columns, filters, startDate, endDate) {
     };
     personRow.totalHours += dayRow.totalHours;
     personRow.overtimeHours += dayRow.overtimeHours;
+    if (isPaper) personRow.breakHours += dayRow.breakHours;
     personRow.workDays += 1;
     personRow.segmentCount += dayRow.segmentCount;
     personRow.punchCount += dayRow.punchCount || 0;
@@ -186,7 +231,7 @@ export function buildShiftsFromSinglePunches(person, punches) {
   return { shifts, unmatched, punchCounts };
 }
 
-export function buildClockInOutShift(row, columns, person, baseDate) {
+export function buildClockInOutShift(row, columns, person, baseDate, sourceType = "machine") {
   const workDate = baseDate ? dateKey(baseDate) : null;
   const clockIn = parseClockOnDate(row[columns.clockIn], baseDate);
   const clockOut = parseClockOnDate(row[columns.clockOut], baseDate);
@@ -202,8 +247,31 @@ export function buildClockInOutShift(row, columns, person, baseDate) {
     workDate,
     start: clockIn,
     end,
-    breakHours: columns.breakTime ? parseDurationHours(row[columns.breakTime]) : 0,
     punchCount: 2,
+    sourceType,
+    breakHours: sourceType === "paper" ? calculatePaperBreakHours(row, columns, baseDate, clockIn, end) : 0,
     shiftLabel: getRowTimesheetParts(row, columns).shift,
   };
+}
+
+export function calculatePaperBreakHours(row, columns, baseDate, shiftStart = null, shiftEnd = null) {
+  const pairs = [
+    [columns.paperBreakOut1, columns.paperBreakIn1],
+    [columns.paperBreakOut2, columns.paperBreakIn2],
+  ];
+  return pairs.reduce((total, [outColumn, inColumn]) => {
+    if (!outColumn || !inColumn) return total;
+    let breakOut = parseClockOnDate(row[outColumn], baseDate);
+    let breakIn = parseClockOnDate(row[inColumn], baseDate);
+    if (!breakOut || !breakIn) return total;
+    while (shiftStart && breakOut < shiftStart) breakOut = new Date(breakOut.getTime() + 24 * HOUR_MS);
+    while (breakIn <= breakOut) breakIn = new Date(breakIn.getTime() + 24 * HOUR_MS);
+    if (shiftStart && shiftEnd && (breakOut < shiftStart || breakIn > shiftEnd)) return total;
+    const hours = (breakIn - breakOut) / HOUR_MS;
+    return Number.isFinite(hours) && hours > 0 && hours <= 4 ? total + hours : total;
+  }, 0);
+}
+
+export function normalizeDataSource(value) {
+  return normalize(value) === "paper" ? "paper" : "machine";
 }
