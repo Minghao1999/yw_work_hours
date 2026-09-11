@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { databaseRecordToRow } from "../src/api.js";
+import { databaseRecordToRow, deleteAttendanceRecords } from "../src/api.js";
 
 test("database record restores its original normalized attendance row", () => {
   const raw = { 人员姓名: "Ana", 日期: "2026-09-09", 地区: "MIA", 总时长: "08:00:00" };
@@ -55,4 +55,36 @@ test("legacy paper records restore clock-in and clock-out from their stored punc
   });
   assert.equal(row["Clock In"], "13:30:00");
   assert.equal(row["Clock Out"], "04:02:00");
+});
+
+test("delete client sends the exact destructive scope to the backend", async () => {
+  const originalFetch = globalThis.fetch;
+  let request;
+  globalThis.fetch = async (url, options) => {
+    request = { url, options };
+    return {
+      ok: true,
+      json: async () => ({ ok: true, deletedCount: 12 }),
+    };
+  };
+
+  try {
+    const result = await deleteAttendanceRecords({
+      scope: "company",
+      sourceType: "machine",
+      region: "ATL",
+      company: "MI",
+    });
+    assert.equal(request.url, "/api/attendance/records");
+    assert.equal(request.options.method, "DELETE");
+    assert.deepEqual(JSON.parse(request.options.body), {
+      scope: "company",
+      sourceType: "machine",
+      region: "ATL",
+      company: "MI",
+    });
+    assert.equal(result.deletedCount, 12);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });

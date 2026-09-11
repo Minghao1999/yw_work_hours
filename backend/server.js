@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "express";
 import { closeDatabase, connectDatabase } from "./db.js";
-import { ensureDatabaseSchema, listAttendanceDates, listAttendanceImports, listAttendanceRecords, RequestError, saveAttendanceImport } from "./attendance.js";
+import { deleteAttendanceRecords, ensureDatabaseSchema, listAttendanceDates, listAttendanceImports, listAttendanceRecords, RequestError, saveAttendanceImport } from "./attendance.js";
 
 const currentFile = fileURLToPath(import.meta.url);
 const projectRoot = path.resolve(path.dirname(currentFile), "..");
@@ -57,6 +57,16 @@ app.get("/api/attendance/records", async (request, response, next) => {
     const database = await connectDatabase();
     const result = await listAttendanceRecords(database, request.query);
     response.json({ ok: true, ...result, count: result.records.length });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete("/api/attendance/records", async (request, response, next) => {
+  try {
+    const database = await connectDatabase();
+    const result = await deleteAttendanceRecords(database, request.body);
+    response.json({ ok: true, ...result });
   } catch (error) {
     next(error);
   }

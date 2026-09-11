@@ -138,6 +138,69 @@ export async function listAttendanceDates(database) {
   ]).toArray();
 }
 
+export async function deleteAttendanceRecords(database, payload) {
+  const { scope, filter } = buildAttendanceDeleteFilter(payload);
+  const records = database.collection(RECORDS_COLLECTION);
+  const imports = database.collection(IMPORTS_COLLECTION);
+  const affectedImports = await records.aggregate([
+    { $match: filter },
+    { $group: { _id: "$importId" } },
+  ]).toArray();
+  const importIds = affectedImports.map((item) => item._id).filter(Boolean);
+  const result = await records.deleteMany(filter);
+
+  if (result.deletedCount) {
+    const modifiedAt = new Date();
+    for (const importId of importIds) {
+      const remainingCount = await records.countDocuments({ importId });
+      if (!remainingCount) {
+        await imports.deleteOne({ _id: importId });
+        continue;
+      }
+      await imports.updateOne(
+        { _id: importId },
+        {
+          $set: {
+            contentHash: `modified:${String(importId)}:${modifiedAt.getTime()}`,
+            recordCount: remainingCount,
+            status: "modified",
+            modifiedAt,
+          },
+        }
+      );
+    }
+  }
+
+  return {
+    scope,
+    deletedCount: result.deletedCount || 0,
+    affectedImportCount: importIds.length,
+  };
+}
+
+export function buildAttendanceDeleteFilter(payload = {}) {
+  const scope = clean(payload.scope).toLowerCase();
+  const sourceType = clean(payload.sourceType).toLowerCase();
+  if (!['machine', 'paper'].includes(sourceType)) {
+    throw new RequestError("删除数据时必须指定数据来源");
+  }
+  if (!['region', 'company', 'person'].includes(scope)) {
+    throw new RequestError("删除范围不正确");
+  }
+
+  const region = clean(payload.region);
+  const company = clean(payload.company);
+  const personName = clean(payload.personName);
+  if (!region) throw new RequestError("删除数据时必须指定地区");
+  if (scope !== 'region' && !company) throw new RequestError("删除数据时必须指定劳务公司");
+  if (scope === 'person' && !personName) throw new RequestError("删除数据时必须指定人员");
+
+  const filter = { sourceType, region };
+  if (scope === 'company' || scope === 'person') filter.company = company;
+  if (scope === 'person') filter.personName = personName;
+  return { scope, filter };
+}
+
 export function normalizeAttendanceDocument(row, context) {
   const punches = Object.keys(row)
     .filter((key) => /^打卡时间\d+$/.test(key) && clean(row[key]))

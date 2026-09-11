@@ -44,6 +44,19 @@ export async function fetchAllAttendanceRecords(pageSize = 5000) {
   return records;
 }
 
+export async function deleteAttendanceRecords(scope) {
+  const response = await fetch("/api/attendance/records", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(scope),
+  });
+  const payload = await readJson(response);
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.error || `删除失败（${response.status}）`);
+  }
+  return payload;
+}
+
 export function databaseRecordToRow(record) {
   if (record?.raw && typeof record.raw === "object" && !Array.isArray(record.raw)) {
     const row = {

@@ -1,9 +1,9 @@
-import { daysBetween, formatDuration, formatRegionName } from './utils.js?v=20260910-39';
-import { buildFullReportFileName, downloadFullReportWorkbook } from './export.js?v=20260910-39';
+import { daysBetween, formatDuration, formatRegionName } from './utils.js?v=20260911-40';
+import { buildFullReportFileName, downloadFullReportWorkbook } from './export.js?v=20260911-40';
 
 const { useState } = React;
 
-export function Dashboard({ analysis, siteName, companyName, analysisMode, setAnalysisMode, regionOptions, companyOptions, selectedRegion, setSelectedRegion, selectedCompany, setSelectedCompany, selectedShift, setSelectedShift, mode, setMode, selectedDate, setSelectedDate, dateRange, activeRange, comparison, fullReport }) {
+export function Dashboard({ analysis, siteName, companyName, analysisMode, setAnalysisMode, regionOptions, companyOptions, selectedRegion, setSelectedRegion, selectedCompany, setSelectedCompany, selectedShift, setSelectedShift, mode, setMode, selectedDate, setSelectedDate, dateRange, activeRange, comparison, fullReport, deletingKey, onDeleteRegion, onDeleteCompany, onDeletePerson }) {
   const overtimeRate = analysis.totalWork ? (analysis.totalOvertime / analysis.totalWork) * 100 : 0;
   const isDay = mode === "day";
   const avgHours = analysis.people.length ? analysis.totalWork / analysis.people.length : 0;
@@ -57,7 +57,15 @@ export function Dashboard({ analysis, siteName, companyName, analysisMode, setAn
               React.createElement(DownloadButton, { onClick: handleFullReportDownload, disabled: !canDownload })
             )
           ),
-          React.createElement(AdaptiveWorkTable, { data: analysis.people, selectedShift, setSelectedShift })
+          React.createElement(AdaptiveWorkTable, {
+            data: analysis.people,
+            selectedShift,
+            setSelectedShift,
+            deletingKey,
+            onDeletePerson,
+            region: siteName,
+            company: companyName,
+          })
     )
   );
 
@@ -67,12 +75,18 @@ export function Dashboard({ analysis, siteName, companyName, analysisMode, setAn
         subtitle: "汇总各地区全部劳务公司的数据",
         rows: comparison.regions,
         onDownload: handleFullReportDownload,
+        onDelete: (row) => onDeleteRegion(row.value),
+        deletingKey,
+        getDeleteKey: (row) => ["region", row.value, "", ""].join(":"),
       })
     : React.createElement(ComparisonCard, {
         title: `${formatRegionName(siteName)} 劳务公司对比`,
         subtitle: "同一地区内按劳务公司汇总",
         rows: comparison.companies,
         onDownload: handleFullReportDownload,
+        onDelete: (row) => onDeleteCompany(row.value),
+        deletingKey,
+        getDeleteKey: (row) => ["company", siteName, row.value, ""].join(":"),
       });
 
   return React.createElement(
@@ -158,7 +172,7 @@ export function ComparisonSection({ comparison, siteName, companyName }) {
   );
 }
 
-export function ComparisonCard({ title, subtitle, rows, onDownload }) {
+export function ComparisonCard({ title, subtitle, rows, onDownload, onDelete, deletingKey = "", getDeleteKey }) {
   const maxWork = Math.max(1, ...rows.map((row) => row.totalWork));
   return React.createElement(
     "div",
@@ -207,7 +221,13 @@ export function ComparisonCard({ title, subtitle, rows, onDownload }) {
             { className: "comparisonNumbers" },
             React.createElement("strong", null, formatDuration(row.totalWork)),
             React.createElement("span", null, `加班 ${formatDuration(row.totalOvertime)} / ${row.peopleCount}人 / ${row.dayCount}天`)
-          )
+          ),
+          onDelete ? React.createElement(DeleteButton, {
+            label: row.label,
+            onClick: () => onDelete(row),
+            disabled: Boolean(deletingKey),
+            busy: deletingKey === getDeleteKey(row),
+          }) : null
         );
       }) : React.createElement("div", { className: "emptyCompare" }, "暂无可对比数据")
     )
@@ -224,6 +244,20 @@ export function DownloadButton({ onClick, disabled }) {
       disabled,
     },
     "下载完整报表"
+  );
+}
+
+export function DeleteButton({ label, onClick, disabled, busy }) {
+  return React.createElement(
+    "button",
+    {
+      type: "button",
+      className: "deleteButton",
+      onClick,
+      disabled,
+      "aria-label": `删除 ${label} 的全部数据`,
+    },
+    busy ? "删除中…" : "删除"
   );
 }
 
@@ -317,7 +351,7 @@ export function Metric({ label, value, hint, tone = "work" }) {
   );
 }
 
-export function AdaptiveWorkTable({ data, selectedShift, setSelectedShift }) {
+export function AdaptiveWorkTable({ data, selectedShift, setSelectedShift, deletingKey = "", onDeletePerson, region, company }) {
   const [tooltip, setTooltip] = useState(null);
   const sorted = [...data].sort((a, b) => b.totalHours - a.totalHours);
   const workMax = 8;
@@ -361,7 +395,8 @@ export function AdaptiveWorkTable({ data, selectedShift, setSelectedShift }) {
           React.createElement("th", { className: "breakHoursHead" }, "休息时长"),
           React.createElement("th", { className: "num" }, "工作日"),
           React.createElement("th", { className: "num" }, "打卡次数"),
-          React.createElement("th", { className: "num" }, "未配对")
+          React.createElement("th", { className: "num" }, "未配对"),
+          React.createElement("th", { className: "actionHead" }, "操作")
         )
       ),
       React.createElement(
@@ -385,11 +420,21 @@ export function AdaptiveWorkTable({ data, selectedShift, setSelectedShift }) {
           React.createElement("td", { className: "breakHoursCell" }, formatBreakDuration(item.breakHours)),
           React.createElement("td", { className: "num" }, item.workDays),
           React.createElement("td", { className: "num" }, item.punchCount || 0),
-          React.createElement("td", { className: "num" }, item.unmatchedCount || 0)
+          React.createElement("td", { className: "num" }, item.unmatchedCount || 0),
+          React.createElement(
+            "td",
+            { className: "actionCell" },
+            React.createElement(DeleteButton, {
+              label: item.person,
+              onClick: () => onDeletePerson(item.person),
+              disabled: Boolean(deletingKey),
+              busy: deletingKey === ["person", region, company, item.person].join(":"),
+            })
+          )
         )) : React.createElement(
           "tr",
           null,
-          React.createElement("td", { className: "emptyRow", colSpan: 9 }, "没有匹配到该班次的数据")
+          React.createElement("td", { className: "emptyRow", colSpan: 10 }, "没有匹配到该班次的数据")
         )
       )
     ),

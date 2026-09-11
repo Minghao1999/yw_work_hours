@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { ObjectId } from "mongodb";
 
-import { hashImport, normalizeAttendanceDocument } from "../backend/attendance.js";
+import { buildAttendanceDeleteFilter, hashImport, normalizeAttendanceDocument, RequestError } from "../backend/attendance.js";
 
 test("MongoDB attendance document keeps normalized fields and ordered punches", () => {
   const importId = new ObjectId();
@@ -92,4 +92,51 @@ test("paper duplicate hash treats legacy punches and clock columns as the same d
   const legacy = [{ ...common, "Clock In": "", "Clock Out": "", 打卡时间1: "13:30:00", 打卡时间2: "4:02:00", 总休息时长: "18:31:00", 考勤记录: "13:30:00" }];
   const current = [{ ...common, "Clock In": "13:30:00", "Clock Out": "04:02:00", "Break In 2": "00:01:00", 总休息时长: "", 考勤记录: "" }];
   assert.equal(hashImport(["260909 NJC.xlsx"], legacy), hashImport(["260909 NJC.xlsx"], current));
+});
+
+test("region deletion is limited to one data source and region", () => {
+  assert.deepEqual(buildAttendanceDeleteFilter({
+    scope: "region",
+    sourceType: "machine",
+    region: "ATL",
+  }), {
+    scope: "region",
+    filter: { sourceType: "machine", region: "ATL" },
+  });
+});
+
+test("company and person deletion include their parent scopes", () => {
+  assert.deepEqual(buildAttendanceDeleteFilter({
+    scope: "company",
+    sourceType: "paper",
+    region: "MIA",
+    company: "ksanchez",
+  }).filter, {
+    sourceType: "paper",
+    region: "MIA",
+    company: "ksanchez",
+  });
+  assert.deepEqual(buildAttendanceDeleteFilter({
+    scope: "person",
+    sourceType: "paper",
+    region: "MIA",
+    company: "ksanchez",
+    personName: "Jessica Flores",
+  }).filter, {
+    sourceType: "paper",
+    region: "MIA",
+    company: "ksanchez",
+    personName: "Jessica Flores",
+  });
+});
+
+test("destructive deletion rejects incomplete scopes", () => {
+  assert.throws(
+    () => buildAttendanceDeleteFilter({ scope: "region", region: "ATL" }),
+    (error) => error instanceof RequestError && /数据来源/.test(error.message)
+  );
+  assert.throws(
+    () => buildAttendanceDeleteFilter({ scope: "person", sourceType: "machine", region: "ATL", company: "MI" }),
+    (error) => error instanceof RequestError && /人员/.test(error.message)
+  );
 });

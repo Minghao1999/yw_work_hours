@@ -1,10 +1,10 @@
-import { DEFAULT_START, sampleRows } from './config.js?v=20260910-39';
-import { analyzeRows } from './analysis.js?v=20260910-39';
-import { Dashboard } from './components.js?v=20260910-39';
-import { clean, formatRegionName, normalize, parseTimesheetParts } from './utils.js?v=20260910-39';
-import { detectDataSource, normalizeSourceValue, guessColumns, inferSiteName, inferCompanyName, getRegionOptions, getCompanyOptions, inferDateRange, readWorkbookFile, readSheet, getRowTimesheetParts, getTimesheetCandidates } from './parser.js?v=20260910-39';
-import { buildFullReport } from './export.js?v=20260910-39';
-import { databaseRecordToRow, fetchAllAttendanceRecords, saveAttendanceImport } from './api.js?v=20260910-39';
+import { DEFAULT_START, sampleRows } from './config.js?v=20260911-40';
+import { analyzeRows } from './analysis.js?v=20260911-40';
+import { Dashboard } from './components.js?v=20260911-40';
+import { clean, formatRegionName, normalize, parseTimesheetParts } from './utils.js?v=20260911-40';
+import { detectDataSource, normalizeSourceValue, guessColumns, inferSiteName, inferCompanyName, getRegionOptions, getCompanyOptions, inferDateRange, readWorkbookFile, readSheet, getRowTimesheetParts, getTimesheetCandidates } from './parser.js?v=20260911-40';
+import { buildFullReport } from './export.js?v=20260911-40';
+import { databaseRecordToRow, deleteAttendanceRecords, fetchAllAttendanceRecords, saveAttendanceImport } from './api.js?v=20260911-40';
 
 const { useEffect, useMemo, useRef, useState } = React;
 const CANONICAL_BASE_COLUMNS = ["数据来源", "人员姓名", "人员ID", "日期", "时间表", "地区", "劳务公司", "班次", "Clock In", "Clock Out", "Break Out 1", "Break In 1", "Break Out 2", "Break In 2", "总休息时长", "总时长", "考勤记录"];
@@ -19,6 +19,7 @@ export function App() {
   const [selectedShift, setSelectedShift] = useState("all");
   const [analysisMode, setAnalysisMode] = useState("region");
   const [selectedDataSource, setSelectedDataSource] = useState("machine");
+  const [deletingKey, setDeletingKey] = useState("");
   const dataRequestVersion = useRef(0);
 
   const visibleRows = useMemo(
@@ -237,6 +238,45 @@ export function App() {
     }
   }
 
+  async function handleDelete(scope) {
+    const sourceLabel = selectedDataSource === "paper" ? "纸质表数据" : "打卡机数据";
+    const scopeLabel = scope.scope === "region"
+      ? `${formatRegionName(scope.region)} 地区`
+      : scope.scope === "company"
+        ? `${formatRegionName(scope.region)} 地区的 ${scope.company} 劳务公司`
+        : `${formatRegionName(scope.region)} 地区、${scope.company} 劳务公司的 ${scope.personName}`;
+    const detail = scope.scope === "region"
+      ? "该地区全部劳务公司、全部人员和全部日期"
+      : scope.scope === "company"
+        ? "该劳务公司的全部人员和全部日期"
+        : "该人员的全部日期";
+    if (!window.confirm(`确定永久删除${sourceLabel}中的【${scopeLabel}】吗？\n\n将删除${detail}的考勤记录，此操作无法撤销。`)) return;
+
+    const deleteKey = [scope.scope, scope.region, scope.company || "", scope.personName || ""].join(":");
+    setDeletingKey(deleteKey);
+    try {
+      const result = await deleteAttendanceRecords({ ...scope, sourceType: selectedDataSource });
+      const remainingRows = rows.filter((row) => !matchesDeleteScope(row, { ...scope, sourceType: selectedDataSource }));
+      const currentSourceHasRows = remainingRows.some((row) => getRowSourceType(row) === selectedDataSource);
+      const otherSource = selectedDataSource === "machine" ? "paper" : "machine";
+      const otherSourceHasRows = remainingRows.some((row) => getRowSourceType(row) === otherSource);
+
+      setRows(remainingRows);
+      setFileName(remainingRows.length ? `MongoDB · ${remainingRows.length} 条记录` : "MongoDB · 0 条记录");
+      setSelectedRegion("");
+      setSelectedCompany("");
+      setSelectedShift("all");
+      if (!currentSourceHasRows && otherSourceHasRows) setSelectedDataSource(otherSource);
+      setNotice(result.deletedCount
+        ? `已永久删除${scopeLabel}的 ${result.deletedCount} 条${sourceLabel}`
+        : `数据库中没有找到${scopeLabel}的可删除记录`);
+    } catch (error) {
+      setNotice(`删除失败：${error.message}`);
+    } finally {
+      setDeletingKey("");
+    }
+  }
+
   function clearData() {
     dataRequestVersion.current += 1;
     setRows([]);
@@ -391,6 +431,10 @@ export function App() {
           activeRange,
           comparison,
           fullReport,
+          deletingKey,
+          onDeleteRegion: (region) => handleDelete({ scope: "region", region }),
+          onDeleteCompany: (company) => handleDelete({ scope: "company", region: activeRegion, company }),
+          onDeletePerson: (personName) => handleDelete({ scope: "person", region: activeRegion, company: activeCompany, personName }),
         }) : null
   );
 }
@@ -451,6 +495,18 @@ function dedupeRows(rows) {
   });
 }
 
+function getRowSourceType(row) {
+  return row["数据来源"] === "paper" ? "paper" : "machine";
+}
+
+function matchesDeleteScope(row, scope) {
+  if (getRowSourceType(row) !== scope.sourceType) return false;
+  if (clean(row["地区"]) !== clean(scope.region)) return false;
+  if (scope.scope !== "region" && clean(row["劳务公司"]) !== clean(scope.company)) return false;
+  if (scope.scope === "person" && clean(row["人员姓名"]) !== clean(scope.personName)) return false;
+  return true;
+}
+
 function buildComparison(rows, columns, config) {
   if (!config.canAnalyze) return { regions: [], companies: [] };
 
@@ -466,21 +522,21 @@ function buildComparison(rows, columns, config) {
   };
 
   return {
-    regions: config.regions.map((region) => summarize(formatRegionName(region), {
+    regions: config.regions.map((region) => ({ ...summarize(formatRegionName(region), {
       region,
       company: "",
       shift: config.selectedShift,
       fallbackRegion: config.fallbackRegion,
       fallbackCompany: "",
       sourceType: config.sourceType,
-    })),
-    companies: config.companies.map((company) => summarize(company, {
+    }), value: region })),
+    companies: config.companies.map((company) => ({ ...summarize(company, {
       region: config.selectedRegion,
       company,
       shift: config.selectedShift,
       fallbackRegion: config.fallbackRegion,
       fallbackCompany: config.fallbackCompany,
       sourceType: config.sourceType,
-    })),
+    }), value: company })),
   };
 }

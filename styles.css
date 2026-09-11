@@ -566,6 +566,31 @@ summary:focus-visible {
 .downloadButton:hover:not(:disabled) { background: #1749bd; }
 .downloadButton:disabled { cursor: not-allowed; opacity: 0.45; }
 
+.deleteButton {
+  min-height: 32px;
+  padding: 5px 10px;
+  border: 1px solid #e7b5b5;
+  border-radius: 8px;
+  background: #fff7f7;
+  color: #b42318;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.deleteButton:hover:not(:disabled) {
+  border-color: #d96c6c;
+  background: #feecec;
+}
+
+.deleteButton:focus-visible {
+  outline: 3px solid rgba(180, 35, 24, 0.18);
+  outline-offset: 2px;
+}
+
+.deleteButton:disabled { cursor: not-allowed; opacity: 0.52; }
+
 .legend i { display: inline-block; width: 9px; height: 9px; margin-right: 5px; border-radius: 3px; }
 .barWork, .workFill { background: #3f75e8; }
 .barOvertime, .overtimeFill, .workOvertimeFill { background: var(--orange); }
@@ -580,7 +605,7 @@ summary:focus-visible {
 
 .adaptiveTable {
   width: 100%;
-  min-width: 1000px;
+  min-width: 1080px;
   border-collapse: separate;
   border-spacing: 0;
   table-layout: fixed;
@@ -706,6 +731,7 @@ summary:focus-visible {
 .workExtraTrack { background: #f5e9df; }
 .workFill, .workOvertimeFill, .overtimeFill { height: 100%; border-radius: inherit; }
 td.num, th.num { width: 88px; text-align: right; font-variant-numeric: tabular-nums; }
+.actionHead, .actionCell { width: 82px; text-align: center !important; }
 .emptyRow { height: 170px; color: #6f7b8d; font-weight: 700; text-align: center; }
 
 .chartTooltip {
@@ -749,7 +775,7 @@ td.num, th.num { width: 88px; text-align: right; font-variant-numeric: tabular-n
 
 .comparisonRow {
   display: grid;
-  grid-template-columns: 110px minmax(140px, 1fr) 210px;
+  grid-template-columns: 110px minmax(140px, 1fr) 210px 70px;
   align-items: center;
   gap: 14px;
   min-height: 46px;
@@ -890,8 +916,10 @@ td.num, th.num { width: 88px; text-align: right; font-variant-numeric: tabular-n
   .downloadButton { width: 100%; }
   .comparisonHead { align-items: flex-start; flex-direction: column; }
   .comparisonHeadAside { justify-items: start; }
-  .comparisonRow { grid-template-columns: 92px minmax(100px, 1fr); }
+  .comparisonRow { grid-template-columns: 92px minmax(100px, 1fr) 64px; }
+  .comparisonBarTrack { grid-column: 2 / 4; }
   .comparisonNumbers { grid-column: 2; }
+  .comparisonRow .deleteButton { grid-column: 3; grid-row: 2; }
 }
 
 @media (max-width: 520px) {
