@@ -32,6 +32,24 @@ test("company options are extracted from the 时间表 column", () => {
   assert.deepEqual(getCompanyOptions(rows, columns, "", "NJC"), ["acme", "delin"]);
 });
 
+test("timesheet parsing recognizes mid shift and leaves unrecognized shifts unknown", () => {
+  assert.deepEqual(parseTimesheetParts("SFO-MEIDA-午班"), {
+    region: "SFO",
+    company: "MEIDA",
+    shift: "午班",
+  });
+  assert.deepEqual(parseTimesheetParts("SFO-MEIDA"), {
+    region: "",
+    company: "",
+    shift: "",
+  });
+  assert.deepEqual(parseTimesheetParts("SFO-MEIDA-未标明班次"), {
+    region: "SFO",
+    company: "MEIDA",
+    shift: "",
+  });
+});
+
 test("Spanish attendance headers map four ordered punch columns", () => {
   const rows = [{
     "Nombre de la persona": "Jessica Flores",

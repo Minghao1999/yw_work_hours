@@ -31,8 +31,54 @@ test("a two-punch workday does not calculate or deduct break time", () => {
   assert.equal(result.people[0].totalHours, 9);
   assert.equal(result.people[0].overtimeHours, 1);
   assert.equal(result.people[0].breakHours, null);
+  assert.equal(result.people[0].shiftText, "未知");
   assert.equal(result.totalWork, 9);
   assert.equal(result.totalOvertime, 1);
+});
+
+test("mid shift can be displayed and filtered", () => {
+  const middayColumns = {
+    ...columns,
+    timesheet: "时间表",
+  };
+  const rows = [
+    { 姓名: "Noon Worker", 日期: "2026-09-08", 时间表: "SFO-MEIDA-午班", 上班: "11:00", 下班: "19:00" },
+    { 姓名: "Early Worker", 日期: "2026-09-08", 时间表: "SFO-MEIDA-早班", 上班: "06:00", 下班: "14:00" },
+  ];
+  const result = analyzeRows(rows, middayColumns, { ...filters, shift: "mid" }, "2026-09-08", "2026-09-08");
+
+  assert.equal(result.people.length, 1);
+  assert.equal(result.people[0].person, "Noon Worker");
+  assert.equal(result.people[0].shiftText, "午班");
+});
+
+test("multi-day personnel totals are accumulated and each work time shows its date", () => {
+  const result = analyzeRows(
+    [
+      { 姓名: "Ming Liu", 日期: "2026-09-08", 上班: "09:00", 下班: "17:00" },
+      { 姓名: "Ming Liu", 日期: "2026-09-09", 上班: "10:00", 下班: "18:30" },
+    ],
+    columns,
+    filters,
+    "2026-09-08",
+    "2026-09-09"
+  );
+
+  assert.equal(result.people[0].totalHours, 16.5);
+  assert.equal(result.people[0].workDays, 2);
+  assert.equal(result.people[0].timeText, "2026-09-08  09:00 → 17:00\n2026-09-09  10:00 → 18:30");
+});
+
+test("a single worked day still shows its date when the selected range spans multiple days", () => {
+  const result = analyzeRows(
+    [{ 姓名: "Ming Liu", 日期: "2026-09-09", 上班: "09:00", 下班: "17:00" }],
+    columns,
+    filters,
+    "2026-09-08",
+    "2026-09-10"
+  );
+
+  assert.equal(result.people[0].timeText, "2026-09-09  09:00 → 17:00");
 });
 
 test("an eight-hour workday shows break time as unavailable", () => {

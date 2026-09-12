@@ -40,7 +40,7 @@ summary:focus-visible {
   width: min(100%, 1600px);
   min-height: 100vh;
   margin: 0 auto;
-  padding: 28px 32px 52px;
+  padding: 16px 24px 40px;
 }
 
 .topbar {
@@ -48,24 +48,24 @@ summary:focus-visible {
   align-items: center;
   justify-content: space-between;
   gap: 24px;
-  margin-bottom: 22px;
+  margin-bottom: 12px;
 }
 
-.brandBlock { display: flex; align-items: center; gap: 15px; }
+.brandBlock { display: flex; align-items: center; gap: 12px; }
 
 .brandMark {
   position: relative;
   display: grid;
-  width: 52px;
-  height: 52px;
-  flex: 0 0 52px;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
   place-items: center;
   overflow: hidden;
-  border-radius: 15px;
+  border-radius: 13px;
   background: var(--navy);
   color: #fff;
   box-shadow: 0 12px 24px rgba(17, 35, 63, 0.2);
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 900;
   letter-spacing: 0.05em;
 }
@@ -74,8 +74,8 @@ summary:focus-visible {
   position: absolute;
   right: -7px;
   bottom: -8px;
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   border-radius: 9px;
   background: var(--blue);
   content: "";
@@ -85,7 +85,7 @@ summary:focus-visible {
 .title h1 {
   margin: 2px 0 3px;
   color: var(--ink);
-  font-size: clamp(27px, 3vw, 36px);
+  font-size: clamp(24px, 2.5vw, 30px);
   line-height: 1.08;
   letter-spacing: -0.035em;
 }
@@ -103,8 +103,8 @@ summary:focus-visible {
 
 .currentScope {
   display: grid;
-  min-width: 255px;
-  padding: 12px 16px;
+  min-width: 210px;
+  padding: 8px 12px;
   border: 1px solid rgba(36, 94, 232, 0.16);
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.72);
@@ -119,11 +119,11 @@ summary:focus-visible {
 .controlBar {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(330px, 0.82fr) minmax(560px, 1.7fr);
+  grid-template-columns: 1fr;
   overflow: hidden;
-  margin-bottom: 14px;
+  margin-bottom: 10px;
   border: 1px solid #d9e1ee;
-  border-radius: 18px;
+  border-radius: 14px;
   background: #fff;
   box-shadow: var(--shadow);
 }
@@ -138,8 +138,14 @@ summary:focus-visible {
   content: "";
 }
 
-.uploadArea, .viewControls { min-width: 0; padding: 20px 22px; }
-.uploadArea { border-right: 1px solid #e5eaf2; }
+.uploadArea, .viewControls { min-width: 0; padding: 12px 16px; }
+.uploadArea {
+  display: grid;
+  grid-template-columns: auto minmax(360px, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  border-right: 1px solid #e5eaf2;
+}
 .controlBar > .uploadArea:only-child { grid-column: 1 / -1; border-right: 0; }
 
 .uploadRow {
@@ -147,7 +153,7 @@ summary:focus-visible {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-top: 10px;
+  margin-top: 0;
 }
 
 .uploadControl { display: flex; min-width: 0; align-items: center; gap: 12px; }
@@ -155,12 +161,12 @@ summary:focus-visible {
 .fileButton {
   position: relative;
   display: inline-flex;
-  min-height: 44px;
+  min-height: 38px;
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 10px 15px;
+  padding: 8px 13px;
   border: 1px solid var(--blue);
   border-radius: 10px;
   background: var(--blue);
@@ -194,8 +200,8 @@ summary:focus-visible {
 .fileMeta small { color: #7b8798; font-size: 12px; line-height: 1.35; }
 
 .clearButton {
-  min-height: 40px;
-  padding: 8px 11px;
+  min-height: 34px;
+  padding: 6px 10px;
   border: 1px solid #d4dce8;
   border-radius: 9px;
   background: #fff;
@@ -213,9 +219,9 @@ summary:focus-visible {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 1px solid #edf1f6;
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
 }
 
 .sourceSelector > span {
@@ -227,21 +233,31 @@ summary:focus-visible {
 
 .sourceSegmented { margin-left: auto; }
 
-.viewControls { display: grid; align-content: center; gap: 8px; }
+.viewControls { display: grid; align-content: center; gap: 5px; }
 .filterTitle { color: #6c7a90; font-size: 12px; font-weight: 850; letter-spacing: 0.05em; }
 .analysisFilters {
   width: auto;
   margin: 0;
-  padding: 15px 16px;
+  padding: 9px 10px;
   border: 1px solid #e0e6ef;
-  border-radius: 13px;
+  border-radius: 11px;
   background: #f7f9fc;
 }
 
 .filterGroup {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 10px;
+  flex: 1 1 260px;
+  gap: 8px;
+}
+
+.filterGroup:empty { display: none; }
+
+.filterControlRow {
+  display: flex;
+  min-width: 0;
+  align-items: end;
+  gap: 8px;
 }
 
 .filterField, .dayPicker {
@@ -268,12 +284,192 @@ summary:focus-visible {
 
 .filterField select:hover, .dayPicker select:hover { border-color: #9eafc8; }
 
-.periodControls {
-  display: flex;
+.periodControls { display: block; min-width: 250px; flex: 1.15 1 280px; }
+
+.dateRangePicker {
+  position: relative;
+  width: 100%;
   min-width: 0;
+}
+
+.dateRangeTrigger {
+  display: grid;
+  width: 100%;
+  min-height: 40px;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) 22px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 11px;
+  border: 1px solid #cfd8e6;
+  border-radius: 10px;
+  background: #fff;
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.dateRangeTrigger:hover { border-color: #9eafc8; }
+
+.dateRangeTrigger.open,
+.dateRangeTrigger:focus-visible {
+  border-color: var(--blue);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.dateRangeValue {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dateRangeArrow { color: #9aa6b8; }
+
+.calendarIcon {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: #8794a8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.dateCalendar {
+  position: absolute;
+  z-index: 50;
+  top: calc(100% + 10px);
+  right: 0;
+  width: min(360px, calc(100vw - 40px));
+  padding: 14px;
+  border: 1px solid #e1e7f0;
+  border-radius: 15px;
+  background: #fff;
+  box-shadow: 0 18px 48px rgba(17, 35, 63, 0.18);
+}
+
+.calendarHeader,
+.calendarFooter {
+  display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.calendarHeader { padding: 1px 2px 12px; }
+
+.calendarHeader strong {
+  color: var(--navy);
+  font-size: 17px;
+  font-weight: 850;
+}
+
+.calendarNav { display: flex; gap: 4px; }
+
+.calendarNav button {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #65748a;
+  cursor: pointer;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.calendarNav button:hover:not(:disabled) {
+  background: #eef3fb;
+  color: var(--blue);
+}
+
+.calendarNav button:disabled {
+  color: #c7cfdb;
+  cursor: not-allowed;
+}
+
+.calendarWeekdays,
+.calendarGrid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.calendarWeekdays {
+  padding: 7px 0;
+  border-top: 1px solid #edf0f5;
+  color: #66758b;
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.calendarGrid { row-gap: 2px; }
+
+.calendarDay {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  height: 40px;
+  place-items: center;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: #263247;
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.calendarDay:hover:not(:disabled) { background: #edf3ff; }
+.calendarDay.outsideMonth { color: #aeb7c5; }
+.calendarDay:disabled { color: #d2d8e1; cursor: not-allowed; }
+.calendarDay.inRange:not(.rangeStart):not(.rangeEnd) { background: #edf3ff; border-radius: 0; }
+
+.calendarDay.rangeStart,
+.calendarDay.rangeEnd {
+  background: var(--blue);
+  color: #fff;
+  font-weight: 850;
+}
+
+.calendarDay.hasData .calendarDayNumber {
+  text-decoration: underline;
+  text-decoration-color: var(--blue);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+}
+
+.calendarDay.hasData.rangeStart .calendarDayNumber,
+.calendarDay.hasData.rangeEnd .calendarDayNumber { text-decoration-color: #fff; }
+
+.calendarFooter {
+  margin-top: 9px;
+  padding: 11px 2px 0;
+  border-top: 1px solid #edf0f5;
+}
+
+.calendarFooter span {
+  color: #7b879a;
+  font-size: 12px;
+}
+
+.calendarFooter button {
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 7px;
+  background: #edf3ff;
+  color: var(--blue);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .segmented, .compareTabs {
@@ -322,13 +518,13 @@ summary:focus-visible {
 
 .analysisModePanel {
   display: grid;
-  grid-template-columns: minmax(0, 1.75fr) minmax(310px, 0.75fr);
+  grid-template-columns: minmax(0, 1.45fr) minmax(480px, 1fr);
   align-items: stretch;
-  gap: 18px;
-  margin-bottom: 24px;
-  padding: 20px 22px 22px;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 10px 12px 12px;
   border: 1px solid #d9e1ee;
-  border-radius: 18px;
+  border-radius: 14px;
   background: #fff;
   box-shadow: var(--shadow);
 }
@@ -336,22 +532,22 @@ summary:focus-visible {
 .analysisChoice {
   display: grid;
   align-content: start;
-  gap: 12px;
+  gap: 6px;
 }
 
 .analysisModes {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+  gap: 7px;
 }
 
 .analysisMode {
   display: grid;
-  grid-template-columns: 36px minmax(0, 1fr) auto;
-  min-height: 84px;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  min-height: 50px;
   align-items: center;
-  gap: 11px;
-  padding: 13px 14px;
+  gap: 9px;
+  padding: 7px 10px;
   border: 1px solid #dce3ee;
   border-radius: 13px;
   background: #f8fafd;
@@ -375,8 +571,8 @@ summary:focus-visible {
 
 .modeNumber {
   display: grid;
-  width: 36px;
-  height: 36px;
+  width: 30px;
+  height: 30px;
   place-items: center;
   border-radius: 10px;
   background: #e8edf5;
@@ -390,24 +586,14 @@ summary:focus-visible {
   color: #fff;
 }
 
-.modeCopy {
-  display: grid;
-  min-width: 0;
-  gap: 4px;
-}
+.modeCopy { display: grid; min-width: 0; gap: 1px; }
 
 .modeCopy strong {
   color: var(--navy);
   font-size: 15px;
 }
 
-.modeCopy small {
-  overflow: hidden;
-  color: #768297;
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+.modeCopy small { display: none; }
 
 .modeArrow {
   color: #9aa6b8;
@@ -424,92 +610,12 @@ summary:focus-visible {
   box-shadow: 0 10px 30px rgba(17, 35, 63, 0.055);
 }
 
-.dashboardHeading {
-  display: flex;
-  align-items: end;
-  justify-content: space-between;
-  gap: 16px;
-  margin: 0 2px 12px;
-}
-
-.dashboardHeading h2, .compareSwitchBar h2 {
+.compareSwitchBar h2 {
   margin: 3px 0 0;
   color: var(--navy);
   font-size: 21px;
   letter-spacing: -0.02em;
 }
-
-.dateBadge {
-  padding: 6px 10px;
-  border: 1px solid #dce3ee;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.72);
-  color: #67758a;
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.metrics {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(160px, 1fr));
-  gap: 13px;
-  margin-bottom: 24px;
-}
-
-.metric {
-  position: relative;
-  min-height: 150px;
-  overflow: hidden;
-  padding: 18px 19px 16px;
-}
-
-.metric::before {
-  position: absolute;
-  top: 0;
-  right: 0;
-  left: 0;
-  height: 3px;
-  background: var(--metric-color);
-  content: "";
-}
-
-.metric--work { --metric-color: #245ee8; --metric-soft: #eaf0ff; }
-.metric--overtime { --metric-color: #ed7d31; --metric-soft: #fff0e5; }
-.metric--people { --metric-color: #16805e; --metric-soft: #e5f5ef; }
-.metric--average { --metric-color: #7657d6; --metric-soft: #f0ebff; }
-
-.metricTop { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.metricTop span { color: #667286; font-size: 14px; font-weight: 700; }
-
-.metricTop i {
-  display: grid;
-  width: 29px;
-  height: 29px;
-  place-items: center;
-  border-radius: 9px;
-  background: var(--metric-soft);
-  color: var(--metric-color);
-  font-style: normal;
-  font-weight: 900;
-}
-
-.metric--work .metricTop i::after { content: "时"; }
-.metric--overtime .metricTop i::after { content: "加"; }
-.metric--people .metricTop i::after { content: "人"; }
-.metric--average .metricTop i::after { content: "均"; }
-
-.metricValue {
-  display: block;
-  margin-top: 17px;
-  color: var(--navy);
-  font-size: clamp(27px, 2.4vw, 36px);
-  line-height: 1;
-  letter-spacing: -0.035em;
-  font-variant-numeric: tabular-nums;
-}
-
-.metric small { display: block; margin-top: 10px; color: #7a8697; font-size: 12px; }
 .compareShell { display: grid; gap: 12px; }
 
 .compareSwitchBar {
@@ -761,7 +867,7 @@ td.num, th.num { width: 88px; text-align: right; font-variant-numeric: tabular-n
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 18px;
+  margin-bottom: 12px;
 }
 
 .comparisonHeadAside { display: grid; justify-items: end; gap: 7px; }
@@ -771,14 +877,14 @@ td.num, th.num { width: 88px; text-align: right; font-variant-numeric: tabular-n
 .comparisonLegend i { display: inline-block; width: 9px; height: 9px; border-radius: 3px; }
 .comparisonLegendWork { background: #3f75e8; }
 .comparisonLegendOvertime { background: var(--orange); }
-.comparisonRows { display: grid; gap: 12px; }
+.comparisonRows { display: grid; gap: 8px; }
 
 .comparisonRow {
   display: grid;
   grid-template-columns: 110px minmax(140px, 1fr) 210px 70px;
   align-items: center;
   gap: 14px;
-  min-height: 46px;
+  min-height: 42px;
 }
 
 .comparisonName {
@@ -863,38 +969,44 @@ td.num, th.num { width: 88px; text-align: right; font-variant-numeric: tabular-n
 }
 
 .notice {
-  margin-bottom: 16px;
-  padding: 12px 14px;
+  margin-bottom: 10px;
+  padding: 8px 12px;
   border: 1px solid #f1d2b8;
   border-left: 4px solid var(--orange);
   border-radius: 10px;
   background: #fff8f2;
   color: #7e4a22;
-  font-size: 14px;
+  font-size: 13px;
 }
 
 @media (max-width: 1120px) {
   .controlBar { grid-template-columns: 1fr; }
-  .uploadArea { border-right: 0; border-bottom: 1px solid #e5eaf2; }
-  .metrics { grid-template-columns: repeat(2, minmax(180px, 1fr)); }
+  .uploadArea {
+    grid-template-columns: auto minmax(0, 1fr);
+    border-right: 0;
+    border-bottom: 1px solid #e5eaf2;
+  }
+  .sourceSelector { grid-column: 1 / -1; }
   .analysisModePanel { grid-template-columns: 1fr; }
-  .analysisMode { min-height: 72px; }
+  .analysisMode { min-height: 48px; }
 }
 
 @media (max-width: 760px) {
   .app { padding: 18px 16px 38px; }
 
-  .topbar, .dashboardHeading, .compareSwitchBar, .sectionHead {
+  .topbar, .compareSwitchBar, .sectionHead {
     align-items: stretch;
     flex-direction: column;
   }
 
   .topbar { gap: 14px; }
   .currentScope { width: 100%; }
-  .uploadArea, .viewControls, .analysisModePanel { padding: 18px; }
+  .uploadArea, .viewControls, .analysisModePanel { padding: 12px; }
+  .uploadArea { grid-template-columns: 1fr; }
+  .sourceSelector { grid-column: auto; }
   .analysisModes { grid-template-columns: 1fr; }
 
-  .uploadRow, .uploadControl, .periodControls {
+  .uploadRow, .uploadControl {
     align-items: stretch;
     flex-direction: column;
   }
@@ -904,12 +1016,12 @@ td.num, th.num { width: 88px; text-align: right; font-variant-numeric: tabular-n
   .sourceSelector { align-items: stretch; flex-direction: column; }
   .sourceSegmented { margin-left: 0; }
   .filterGroup { grid-template-columns: 1fr; }
+  .filterControlRow { align-items: stretch; flex-direction: column; }
+  .periodControls { min-width: 0; flex-basis: auto; }
   .segmented, .compareTabs { width: 100%; }
   .segmented button, .compareTabs button { flex: 1; padding-right: 8px; padding-left: 8px; }
-  .dayPicker { grid-template-columns: 1fr; }
-  .rangeText { text-align: center; }
-  .dashboardHeading, .compareSwitchBar { gap: 10px; }
-  .dateBadge { width: fit-content; }
+  .dateRangeValue { font-size: 12px; }
+  .compareSwitchBar { gap: 10px; }
   .section { padding: 16px 14px 8px; }
   .legend { flex-wrap: wrap; }
   .sectionActions { align-items: flex-start; flex-direction: column; }
@@ -924,8 +1036,6 @@ td.num, th.num { width: 88px; text-align: right; font-variant-numeric: tabular-n
 
 @media (max-width: 520px) {
   .brandMark { width: 46px; height: 46px; flex-basis: 46px; border-radius: 13px; }
-  .metrics { grid-template-columns: 1fr; }
-  .metric { min-height: 132px; }
   .empty { min-height: 360px; padding: 30px 20px; }
 }
 

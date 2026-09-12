@@ -1,5 +1,5 @@
-import { DEFAULT_START, DEFAULT_END, HOUR_MS, DEFAULT_COMPANY_OPTIONS, columnRules } from './config.js?v=20260910-39';
-import { clean, normalize, parseAnyDate, parseDateOnly, parseDurationHours, dateKey, extractPunches, parseTimesheetParts } from './utils.js?v=20260910-39';
+import { DEFAULT_START, DEFAULT_END, HOUR_MS, DEFAULT_COMPANY_OPTIONS, columnRules } from './config.js?v=20260911-46';
+import { clean, normalize, parseAnyDate, parseDateOnly, parseDurationHours, dateKey, extractPunches, parseTimesheetParts } from './utils.js?v=20260911-46';
 
 export function readWorkbookFile(file, data) {
   if (/\.csv$/i.test(file.name)) {
@@ -395,7 +395,7 @@ export function getTimesheetCandidates(row, columns) {
 
 export function looksLikeTimesheetValue(value) {
   const text = clean(value).replace(/[－–—‑‒−﹣－]/g, "-");
-  return /^[^-]+-[^-]+-.*(早|晚)/.test(text);
+  return /^[^-]+-[^-]+-.*(早|午|晚|morning|early|midday|noon|afternoon|night|evening|late|matutino|mañana|vespertino|tarde|nocturno|noche)/i.test(text);
 }
 
 export function getTimesheetCompanies(rows, columns, regionFilter = "") {

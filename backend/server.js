@@ -56,6 +56,7 @@ app.get("/api/attendance/records", async (request, response, next) => {
   try {
     const database = await connectDatabase();
     const result = await listAttendanceRecords(database, request.query);
+    console.log(`已读取 MongoDB 考勤记录：${result.records.length} 条`);
     response.json({ ok: true, ...result, count: result.records.length });
   } catch (error) {
     next(error);

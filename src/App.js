@@ -1,10 +1,10 @@
-import { DEFAULT_START, sampleRows } from './config.js?v=20260911-40';
-import { analyzeRows } from './analysis.js?v=20260911-40';
-import { Dashboard } from './components.js?v=20260911-40';
-import { clean, formatRegionName, normalize, parseTimesheetParts } from './utils.js?v=20260911-40';
-import { detectDataSource, normalizeSourceValue, guessColumns, inferSiteName, inferCompanyName, getRegionOptions, getCompanyOptions, inferDateRange, readWorkbookFile, readSheet, getRowTimesheetParts, getTimesheetCandidates } from './parser.js?v=20260911-40';
-import { buildFullReport } from './export.js?v=20260911-40';
-import { databaseRecordToRow, deleteAttendanceRecords, fetchAllAttendanceRecords, saveAttendanceImport } from './api.js?v=20260911-40';
+import { DEFAULT_START, sampleRows } from './config.js?v=20260911-46';
+import { analyzeRows } from './analysis.js?v=20260911-46';
+import { Dashboard } from './components.js?v=20260911-47';
+import { clean, formatRegionName, normalize, parseTimesheetParts } from './utils.js?v=20260911-46';
+import { detectDataSource, normalizeSourceValue, guessColumns, inferSiteName, inferCompanyName, getRegionOptions, getCompanyOptions, inferDateRange, readWorkbookFile, readSheet, getRowTimesheetParts, getTimesheetCandidates } from './parser.js?v=20260911-46';
+import { buildFullReport } from './export.js?v=20260911-48';
+import { databaseRecordToRow, deleteAttendanceRecords, fetchAllAttendanceRecords, saveAttendanceImport } from './api.js?v=20260911-46';
 
 const { useEffect, useMemo, useRef, useState } = React;
 const CANONICAL_BASE_COLUMNS = ["数据来源", "人员姓名", "人员ID", "日期", "时间表", "地区", "劳务公司", "班次", "Clock In", "Clock Out", "Break Out 1", "Break In 1", "Break Out 2", "Break In 2", "总休息时长", "总时长", "考勤记录"];
@@ -14,8 +14,8 @@ export function App() {
   const [columns, setColumns] = useState(sampleRows[0] ? Object.keys(sampleRows[0]) : []);
   const [fileName, setFileName] = useState("未上传文件");
   const [notice, setNotice] = useState("");
-  const [mode, setMode] = useState("week");
-  const [selectedDate, setSelectedDate] = useState(DEFAULT_START);
+  const [selectedStartDate, setSelectedStartDate] = useState(DEFAULT_START);
+  const [selectedEndDate, setSelectedEndDate] = useState(DEFAULT_START);
   const [selectedShift, setSelectedShift] = useState("all");
   const [analysisMode, setAnalysisMode] = useState("region");
   const [selectedDataSource, setSelectedDataSource] = useState("machine");
@@ -40,9 +40,10 @@ export function App() {
   const activeRegion = selectedRegion || regionOptions[0] || siteName;
   const companyOptions = useMemo(() => getCompanyOptions(visibleRows, guessed, companyName, activeRegion), [visibleRows, guessed.region, guessed.company, guessed.personId, guessed.timesheet, companyName, activeRegion]);
   const dateRange = useMemo(() => inferDateRange(visibleRows, guessed), [visibleRows, guessed.date, guessed.time, guessed.timeColumns.join("|"), guessed.clockIn, guessed.clockOut, guessed.totalDuration]);
-  const activeRange = mode === "day"
-    ? { start: selectedDate, end: selectedDate }
-    : dateRange;
+  const activeRange = {
+    start: selectedStartDate || dateRange.start,
+    end: selectedEndDate || selectedStartDate || dateRange.end,
+  };
   const activeCompany = selectedCompany || companyOptions[0] || companyName;
   const effectiveShift = analysisMode === "person" ? selectedShift : "all";
   const currentScopeLabel = analysisMode === "region"
@@ -57,10 +58,11 @@ export function App() {
     () => canAnalyze ? buildFullReport(visibleRows, guessed, {
       regions: regionOptions,
       fallbackRegion: siteName,
-      startDate: dateRange.start,
-      endDate: dateRange.end,
+      fallbackCompany: companyName,
+      startDate: activeRange.start,
+      endDate: activeRange.end,
     }) : { regionSummaries: [], companySummaries: [], peopleByRegion: [] },
-    [visibleRows, guessed.person, guessed.region, guessed.company, guessed.personId, guessed.date, guessed.time, guessed.timeColumns.join("|"), guessed.clockIn, guessed.clockOut, guessed.totalDuration, guessed.timesheet, regionOptions.join("|"), siteName, dateRange.start, dateRange.end, canAnalyze]
+    [visibleRows, guessed.person, guessed.region, guessed.company, guessed.personId, guessed.date, guessed.time, guessed.timeColumns.join("|"), guessed.clockIn, guessed.clockOut, guessed.totalDuration, guessed.timesheet, regionOptions.join("|"), siteName, companyName, activeRange.start, activeRange.end, canAnalyze]
   );
 
   const analysis = useMemo(
@@ -108,15 +110,20 @@ export function App() {
   }, [companyOptions.join("|"), selectedCompany]);
 
   useEffect(() => {
-    if (selectedDate < dateRange.start || selectedDate > dateRange.end) {
-      setSelectedDate(dateRange.start);
+    const selectionIsOutsideRange = selectedStartDate < dateRange.start
+      || selectedStartDate > dateRange.end
+      || selectedEndDate < dateRange.start
+      || selectedEndDate > dateRange.end;
+    if (selectionIsOutsideRange) {
+      setSelectedStartDate(dateRange.end);
+      setSelectedEndDate(dateRange.end);
     }
-  }, [dateRange.start, dateRange.end, selectedDate]);
+  }, [dateRange.start, dateRange.end, selectedStartDate, selectedEndDate]);
 
   useEffect(() => {
     const requestVersion = ++dataRequestVersion.current;
     let cancelled = false;
-    setNotice("正在从 MongoDB 读取考勤数据…");
+    setNotice("");
 
     fetchAllAttendanceRecords()
       .then((records) => {
@@ -153,10 +160,10 @@ export function App() {
         setSelectedCompany(nextCompanies[0] || databaseCompany);
         setSelectedShift("all");
         setAnalysisMode("region");
-        setMode("day");
-        setSelectedDate(nextDateRange.end);
+        setSelectedStartDate(nextDateRange.end);
+        setSelectedEndDate(nextDateRange.end);
         setFileName(`MongoDB · ${databaseRows.length} 条记录`);
-        setNotice(`已从 MongoDB 加载 ${databaseRows.length} 条考勤记录，当前显示${nextSource === "paper" ? "纸质表" : "打卡机"}数据 ${nextDateRange.end}`);
+        setNotice("");
       })
       .catch((error) => {
         if (cancelled || requestVersion !== dataRequestVersion.current) return;
@@ -288,8 +295,8 @@ export function App() {
     setSelectedShift("all");
     setSelectedDataSource("machine");
     setAnalysisMode("region");
-    setMode("week");
-    setSelectedDate(DEFAULT_START);
+    setSelectedStartDate(DEFAULT_START);
+    setSelectedEndDate(DEFAULT_START);
   }
 
   return React.createElement(
@@ -374,7 +381,7 @@ export function App() {
                 setSelectedDataSource("machine");
                 setSelectedRegion("");
                 setSelectedCompany("");
-                setNotice(`当前显示打卡机数据，共 ${sourceCounts.machine} 条；休息时长显示为 -`);
+                setNotice("");
               },
             }, `打卡机数据 ${sourceCounts.machine}`),
             React.createElement("button", {
@@ -385,7 +392,7 @@ export function App() {
                 setSelectedDataSource("paper");
                 setSelectedRegion("");
                 setSelectedCompany("");
-                setNotice(`当前显示纸质表数据，共 ${sourceCounts.paper} 条；休息时长为两段休息之和`);
+                setNotice("");
               },
             }, `纸质表数据 ${sourceCounts.paper}`),
           )
@@ -423,10 +430,10 @@ export function App() {
           setSelectedCompany,
           selectedShift,
           setSelectedShift,
-          mode,
-          setMode,
-          selectedDate,
-          setSelectedDate,
+          selectedStartDate,
+          setSelectedStartDate,
+          selectedEndDate,
+          setSelectedEndDate,
           dateRange,
           activeRange,
           comparison,

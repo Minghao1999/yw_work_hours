@@ -1,38 +1,16 @@
-import { daysBetween, formatDuration, formatRegionName } from './utils.js?v=20260911-40';
-import { buildFullReportFileName, downloadFullReportWorkbook } from './export.js?v=20260911-40';
+import { formatDuration, formatRegionName } from './utils.js?v=20260911-46';
+import { buildFullReportFileName, downloadFullReportWorkbook } from './export.js?v=20260911-46';
 
-const { useState } = React;
+const { useEffect, useRef, useState } = React;
 
-export function Dashboard({ analysis, siteName, companyName, analysisMode, setAnalysisMode, regionOptions, companyOptions, selectedRegion, setSelectedRegion, selectedCompany, setSelectedCompany, selectedShift, setSelectedShift, mode, setMode, selectedDate, setSelectedDate, dateRange, activeRange, comparison, fullReport, deletingKey, onDeleteRegion, onDeleteCompany, onDeletePerson }) {
-  const overtimeRate = analysis.totalWork ? (analysis.totalOvertime / analysis.totalWork) * 100 : 0;
-  const isDay = mode === "day";
-  const avgHours = analysis.people.length ? analysis.totalWork / analysis.people.length : 0;
-  const scopeName = `${formatRegionName(siteName)} ${companyName || "未识别劳务公司"}`;
-  const downloadFileName = buildFullReportFileName(dateRange.start, dateRange.end);
+export function Dashboard({ analysis, siteName, companyName, analysisMode, setAnalysisMode, regionOptions, companyOptions, selectedRegion, setSelectedRegion, selectedCompany, setSelectedCompany, selectedShift, setSelectedShift, selectedStartDate, setSelectedStartDate, selectedEndDate, setSelectedEndDate, dateRange, activeRange, comparison, fullReport, deletingKey, onDeleteRegion, onDeleteCompany, onDeletePerson }) {
+  const isDay = activeRange.start === activeRange.end;
+  const downloadFileName = buildFullReportFileName(activeRange.start, activeRange.end);
   const handleFullReportDownload = () => downloadFullReportWorkbook(fullReport, downloadFileName);
   const canDownload = Boolean(fullReport && fullReport.regionSummaries && fullReport.regionSummaries.length);
   const personView = React.createElement(
     React.Fragment,
     null,
-    React.createElement(
-      "section",
-      { className: "dashboardHeading" },
-      React.createElement(
-        "div",
-        null,
-        React.createElement("span", { className: "eyebrow" }, "人员概览"),
-        React.createElement("h2", null, scopeName)
-      ),
-      React.createElement("span", { className: "dateBadge" }, isDay ? activeRange.start : `${activeRange.start} — ${activeRange.end}`)
-    ),
-    React.createElement(
-      "section",
-      { className: "metrics" },
-      React.createElement(Metric, { tone: "work", label: isDay ? "当日工作时长" : "总工作时长", value: formatDuration(analysis.totalWork), hint: `覆盖 ${analysis.dayCount || 0} 天记录` }),
-      React.createElement(Metric, { tone: "overtime", label: isDay ? "当日加班时长" : "总加班时长", value: formatDuration(analysis.totalOvertime), hint: `占总工时 ${overtimeRate.toFixed(1)}%` }),
-      React.createElement(Metric, { tone: "people", label: "统计人数", value: analysis.people.length, hint: "已按姓名去重" }),
-      React.createElement(Metric, { tone: "average", label: "人均工作时长", value: formatDuration(avgHours), hint: isDay ? "当日合计 ÷ 人数" : "总工时 ÷ 人数" })
-    ),
     React.createElement(
           "div",
           { className: "panel section" },
@@ -109,10 +87,10 @@ export function Dashboard({ analysis, siteName, companyName, analysisMode, setAn
         selectedCompany,
         setSelectedCompany,
         analysisMode,
-        mode,
-        setMode,
-        selectedDate,
-        setSelectedDate,
+        selectedStartDate,
+        setSelectedStartDate,
+        selectedEndDate,
+        setSelectedEndDate,
         dateRange,
       })
     ),
@@ -269,86 +247,250 @@ export function EmptyPanel({ message }) {
   );
 }
 
-export function ViewControls({ regionOptions, companyOptions, selectedRegion, setSelectedRegion, selectedCompany, setSelectedCompany, analysisMode, mode, setMode, selectedDate, setSelectedDate, dateRange }) {
-  const dates = dateRange.dates && dateRange.dates.length ? dateRange.dates : daysBetween(dateRange.start, dateRange.end);
+export function ViewControls({ regionOptions, companyOptions, selectedRegion, setSelectedRegion, selectedCompany, setSelectedCompany, analysisMode, selectedStartDate, setSelectedStartDate, selectedEndDate, setSelectedEndDate, dateRange }) {
   return React.createElement(
     "section",
     { className: "viewControls analysisFilters" },
     React.createElement("span", { className: "filterTitle" }, "筛选范围"),
     React.createElement(
       "div",
-      { className: "filterGroup" },
-      analysisMode !== "region" ? React.createElement(
-        "label",
-        { className: "filterField" },
-        React.createElement("span", null, "地区"),
-        React.createElement(
-          "select",
-          {
-            value: selectedRegion,
-            onChange: (event) => {
-              setSelectedRegion(event.target.value);
-              setSelectedCompany("");
-            },
-          },
-          regionOptions.map((region) => React.createElement("option", { key: region, value: region }, formatRegionName(region)))
-        )
-      ) : null,
-      analysisMode === "person" ? React.createElement(
-        "label",
-        { className: "filterField" },
-        React.createElement("span", null, "劳务公司"),
-        React.createElement(
-          "select",
-          { value: selectedCompany, onChange: (event) => setSelectedCompany(event.target.value) },
-          companyOptions.map((company) => React.createElement("option", { key: company, value: company }, company))
-        )
-      ) : null
-    ),
-    React.createElement(
-      "div",
-      { className: "periodControls" },
+      { className: "filterControlRow" },
       React.createElement(
         "div",
-        { className: "segmented", role: "group", "aria-label": "统计周期" },
-        React.createElement("button", {
-          type: "button",
-          className: mode === "week" ? "active" : "",
-          onClick: () => setMode("week"),
-        }, "全部日期"),
-        React.createElement("button", {
-          type: "button",
-          className: mode === "day" ? "active" : "",
-          onClick: () => setMode("day"),
-        }, "指定日期")
+        { className: "filterGroup" },
+        analysisMode !== "region" ? React.createElement(
+          "label",
+          { className: "filterField" },
+          React.createElement("span", null, "地区"),
+          React.createElement(
+            "select",
+            {
+              value: selectedRegion,
+              onChange: (event) => {
+                setSelectedRegion(event.target.value);
+                setSelectedCompany("");
+              },
+            },
+            regionOptions.map((region) => React.createElement("option", { key: region, value: region }, formatRegionName(region)))
+          )
+        ) : null,
+        analysisMode === "person" ? React.createElement(
+          "label",
+          { className: "filterField" },
+          React.createElement("span", null, "劳务公司"),
+          React.createElement(
+            "select",
+            { value: selectedCompany, onChange: (event) => setSelectedCompany(event.target.value) },
+            companyOptions.map((company) => React.createElement("option", { key: company, value: company }, company))
+          )
+        ) : null
       ),
-      mode === "day" ? React.createElement(
-        "label",
-        { className: "dayPicker" },
-        React.createElement("span", null, "日期"),
-        React.createElement(
-          "select",
-          { value: selectedDate, onChange: (event) => setSelectedDate(event.target.value) },
-          dates.map((date) => React.createElement("option", { key: date, value: date }, date))
-        )
-      ) : React.createElement("div", { className: "rangeText" }, `${dateRange.start} 至 ${dateRange.end}`)
+      React.createElement(
+        "div",
+        { className: "periodControls" },
+        React.createElement(DateRangePicker, {
+          startDate: selectedStartDate,
+          endDate: selectedEndDate,
+          onStartDateChange: setSelectedStartDate,
+          onEndDateChange: setSelectedEndDate,
+          dateRange,
+        })
+      )
     )
   );
 }
 
-export function Metric({ label, value, hint, tone = "work" }) {
+export function DateRangePicker({ startDate, endDate, onStartDateChange, onEndDateChange, dateRange }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [selectingEnd, setSelectingEnd] = useState(false);
+  const [displayMonth, setDisplayMonth] = useState(monthStart(startDate || dateRange.end));
+  const pickerRef = useRef(null);
+  const dataDates = new Set(dateRange.dates || []);
+  const calendarDays = buildCalendarDays(displayMonth);
+  const selectedLow = startDate <= endDate ? startDate : endDate;
+  const selectedHigh = startDate <= endDate ? endDate : startDate;
+  const minimumMonth = monthStart(dateRange.start);
+  const maximumMonth = monthStart(dateRange.end);
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    const closeOnOutsideClick = (event) => {
+      if (pickerRef.current && !pickerRef.current.contains(event.target)) {
+        setIsOpen(false);
+        setSelectingEnd(false);
+      }
+    };
+    const closeOnEscape = (event) => {
+      if (event.key === "Escape") {
+        setIsOpen(false);
+        setSelectingEnd(false);
+      }
+    };
+    document.addEventListener("mousedown", closeOnOutsideClick);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("mousedown", closeOnOutsideClick);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (isOpen) setDisplayMonth(monthStart(startDate || dateRange.end));
+  }, [isOpen, startDate, dateRange.end]);
+
+  const chooseDate = (date) => {
+    if (!selectingEnd) {
+      onStartDateChange(date);
+      onEndDateChange(date);
+      setSelectingEnd(true);
+      return;
+    }
+    const rangeStart = date < startDate ? date : startDate;
+    const rangeEnd = date < startDate ? startDate : date;
+    onStartDateChange(rangeStart);
+    onEndDateChange(rangeEnd);
+    setSelectingEnd(false);
+    setIsOpen(false);
+  };
+
+  const chooseAllDates = () => {
+    onStartDateChange(dateRange.start);
+    onEndDateChange(dateRange.end);
+    setSelectingEnd(false);
+    setIsOpen(false);
+  };
+
+  const monthDate = parseISODate(displayMonth);
+  const monthLabel = `${monthDate.getFullYear()}年 ${monthDate.getMonth() + 1}月`;
+
   return React.createElement(
     "div",
-    { className: `panel metric metric--${tone}` },
+    { className: "dateRangePicker", ref: pickerRef },
     React.createElement(
-      "div",
-      { className: "metricTop" },
-      React.createElement("span", null, label),
-      React.createElement("i", { "aria-hidden": "true" })
+      "button",
+      {
+        type: "button",
+        className: isOpen ? "dateRangeTrigger open" : "dateRangeTrigger",
+        onClick: () => {
+          setIsOpen((current) => !current);
+          setSelectingEnd(false);
+        },
+        "aria-haspopup": "dialog",
+        "aria-expanded": isOpen,
+        "aria-label": `选择日期范围，当前为 ${startDate} 至 ${endDate}`,
+      },
+      React.createElement("span", { className: "dateRangeValue" }, startDate || "开始日期"),
+      React.createElement("span", { className: "dateRangeArrow", "aria-hidden": "true" }, "→"),
+      React.createElement("span", { className: "dateRangeValue" }, endDate || "结束日期"),
+      React.createElement(
+        "svg",
+        { className: "calendarIcon", viewBox: "0 0 24 24", "aria-hidden": "true" },
+        React.createElement("path", { d: "M7 3v3m10-3v3M4.5 9h15M6 5h12a2 2 0 0 1 2 2v12H4V7a2 2 0 0 1 2-2Z" })
+      )
     ),
-    React.createElement("strong", { className: "metricValue" }, value),
-    React.createElement("small", null, hint)
+    isOpen ? React.createElement(
+      "div",
+      { className: "dateCalendar", role: "dialog", "aria-label": "选择日期范围" },
+      React.createElement(
+        "div",
+        { className: "calendarHeader" },
+        React.createElement("strong", null, monthLabel),
+        React.createElement(
+          "div",
+          { className: "calendarNav" },
+          React.createElement("button", {
+            type: "button",
+            onClick: () => setDisplayMonth(shiftMonth(displayMonth, -1)),
+            disabled: displayMonth <= minimumMonth,
+            "aria-label": "上个月",
+          }, "‹"),
+          React.createElement("button", {
+            type: "button",
+            onClick: () => setDisplayMonth(shiftMonth(displayMonth, 1)),
+            disabled: displayMonth >= maximumMonth,
+            "aria-label": "下个月",
+          }, "›")
+        )
+      ),
+      React.createElement(
+        "div",
+        { className: "calendarWeekdays", "aria-hidden": "true" },
+        ["一", "二", "三", "四", "五", "六", "日"].map((day) => React.createElement("span", { key: day }, day))
+      ),
+      React.createElement(
+        "div",
+        { className: "calendarGrid" },
+        calendarDays.map(({ date, inMonth }) => {
+          const isDisabled = date < dateRange.start || date > dateRange.end;
+          const isStart = date === selectedLow;
+          const isEnd = date === selectedHigh;
+          const isInRange = date >= selectedLow && date <= selectedHigh;
+          const classes = [
+            "calendarDay",
+            inMonth ? "" : "outsideMonth",
+            dataDates.has(date) ? "hasData" : "",
+            isInRange ? "inRange" : "",
+            isStart ? "rangeStart" : "",
+            isEnd ? "rangeEnd" : "",
+          ].filter(Boolean).join(" ");
+          return React.createElement(
+            "button",
+            {
+              type: "button",
+              key: date,
+              className: classes,
+              disabled: isDisabled,
+              onClick: () => chooseDate(date),
+              "aria-label": `${date}${dataDates.has(date) ? "，有考勤数据" : ""}`,
+            },
+            React.createElement("span", { className: "calendarDayNumber" }, Number(date.slice(-2)))
+          );
+        })
+      ),
+      React.createElement(
+        "div",
+        { className: "calendarFooter" },
+        React.createElement("span", null, selectingEnd ? "请选择结束日期" : "请选择开始日期"),
+        React.createElement("button", { type: "button", onClick: chooseAllDates }, "选择全部日期")
+      )
+    ) : null
   );
+}
+
+function parseISODate(value) {
+  const [year, month, day] = String(value || "").split("-").map(Number);
+  return new Date(year, Math.max(0, (month || 1) - 1), day || 1);
+}
+
+function formatISODate(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function monthStart(value) {
+  const date = parseISODate(value);
+  return formatISODate(new Date(date.getFullYear(), date.getMonth(), 1));
+}
+
+function shiftMonth(value, amount) {
+  const date = parseISODate(value);
+  return formatISODate(new Date(date.getFullYear(), date.getMonth() + amount, 1));
+}
+
+function buildCalendarDays(value) {
+  const month = parseISODate(value);
+  const firstDay = new Date(month.getFullYear(), month.getMonth(), 1);
+  const mondayOffset = (firstDay.getDay() + 6) % 7;
+  const gridStart = new Date(month.getFullYear(), month.getMonth(), 1 - mondayOffset);
+  return Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + index);
+    return {
+      date: formatISODate(date),
+      inMonth: date.getMonth() === month.getMonth() && date.getFullYear() === month.getFullYear(),
+    };
+  });
 }
 
 export function AdaptiveWorkTable({ data, selectedShift, setSelectedShift, deletingKey = "", onDeletePerson, region, company }) {
@@ -385,7 +527,9 @@ export function AdaptiveWorkTable({ data, selectedShift, setSelectedShift, delet
                 },
                 React.createElement("option", { value: "all" }, "全部"),
                 React.createElement("option", { value: "early" }, "早班"),
-                React.createElement("option", { value: "late" }, "晚班")
+                React.createElement("option", { value: "mid" }, "午班"),
+                React.createElement("option", { value: "late" }, "晚班"),
+                React.createElement("option", { value: "unknown" }, "未知")
               )
             )
           ),
@@ -410,11 +554,12 @@ export function AdaptiveWorkTable({ data, selectedShift, setSelectedShift, delet
             onMouseLeave: () => setTooltip(null),
           },
           React.createElement("td", { className: "personCell" }, item.person),
-          React.createElement("td", { className: "shiftCell" }, item.shiftText || "-"),
+          React.createElement("td", { className: "shiftCell" }, item.shiftText || "未知"),
           React.createElement("td", { className: "timeCell" }, item.timeText || "-"),
           React.createElement("td", { className: "workHoursCell" }, React.createElement(WorkInlineBar, {
             value: item.totalHours,
-            regularMax: workMax,
+            overtimeHours: item.overtimeHours,
+            regularMax: workMax * Math.max(1, item.workDays),
           })),
           React.createElement("td", { className: "overtimeHoursCell overtimeNumber" }, formatDuration(item.overtimeHours)),
           React.createElement("td", { className: "breakHoursCell" }, formatBreakDuration(item.breakHours)),
@@ -463,9 +608,8 @@ function formatBreakDuration(value) {
   return value == null ? "-" : formatDuration(value);
 }
 
-export function WorkInlineBar({ value, regularMax }) {
-  const regularHours = Math.min(value, regularMax);
-  const overtimeHours = Math.max(0, value - regularMax);
+export function WorkInlineBar({ value, overtimeHours = 0, regularMax }) {
+  const regularHours = Math.max(0, value - overtimeHours);
   const regularWidth = regularMax ? Math.min(100, Math.max(0, (regularHours / regularMax) * 100)) : 0;
   const overtimeWidth = regularMax ? Math.min(80, Math.max(0, (overtimeHours / regularMax) * 100)) : 0;
   return React.createElement(

@@ -1,6 +1,6 @@
-import { analyzeRows } from './analysis.js?v=20260910-39';
-import { getCompanyOptions } from './parser.js?v=20260910-39';
-import { formatDuration, formatRegionName } from './utils.js?v=20260910-39';
+import { analyzeRows } from './analysis.js?v=20260911-46';
+import { getCompanyOptions } from './parser.js?v=20260911-46';
+import { formatDuration, formatRegionName } from './utils.js?v=20260911-46';
 
 export function buildFullReport(rows, columns, config) {
   const regionSummaries = [];
@@ -24,7 +24,7 @@ export function buildFullReport(rows, columns, config) {
       dayCount: regionAnalysis.dayCount || 0,
     });
 
-    const companies = getCompanyOptions(rows, columns, "", region);
+    const companies = getCompanyOptions(rows, columns, config.fallbackCompany || "", region);
     const regionPeople = [];
     companies.forEach((company) => {
       const companyAnalysis = analyzeRows(rows, columns, {
@@ -32,7 +32,7 @@ export function buildFullReport(rows, columns, config) {
         company,
         shift: "all",
         fallbackRegion: config.fallbackRegion,
-        fallbackCompany: "",
+        fallbackCompany: config.fallbackCompany || "",
       }, config.startDate, config.endDate);
 
       companySummaries.push({

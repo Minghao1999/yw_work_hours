@@ -1,4 +1,4 @@
-import { HOUR_MS, SHIFT_DAY_CUTOFF_HOUR } from './config.js?v=20260910-39';
+import { HOUR_MS, SHIFT_DAY_CUTOFF_HOUR } from './config.js?v=20260911-46';
 
 export function parseClockOnDate(value, date) {
   if (!date) return null;
@@ -26,24 +26,26 @@ export function parseDurationHours(value) {
 export function normalizeShiftLabel(value) {
   const text = clean(value);
   if (!text) return "";
-  if (text.includes("早")) return "早班";
-  if (text.includes("晚")) return "晚班";
-  return text;
+  const normalized = normalize(text);
+  if (/早|morning|early|matutino|mañana/.test(normalized)) return "早班";
+  if (/午|midday|noon|afternoon|vespertino|tarde/.test(normalized)) return "午班";
+  if (/晚|night|evening|late|nocturno|noche/.test(normalized)) return "晚班";
+  if (/未知|unknown|unassigned|unspecified|desconocido|sin\s*turno/.test(normalized)) return "未知";
+  return "";
 }
 
 export function parseTimesheetParts(value) {
   const text = clean(value);
   if (!text) return { region: "", company: "", shift: "" };
 
-  const normalizedText = text.replace(/[－–—‑‒−﹣－]/g, "-");
   const parts = text
     .replace(/[－–—‑‒−﹣－]/g, "-")
     .split(/\s*-\s*/)
     .map((part) => clean(part))
     .filter(Boolean);
 
-  const shiftIndex = parts.findIndex((part) => /早|晚/.test(part));
-  const shift = shiftIndex >= 0 ? normalizeShiftLabel(parts[shiftIndex]) : normalizeShiftLabel(normalizedText);
+  const shiftIndex = parts.findIndex((part) => Boolean(normalizeShiftLabel(part)));
+  const shift = shiftIndex >= 0 ? normalizeShiftLabel(parts[shiftIndex]) : "";
   if (parts.length < 3) return { region: "", company: "", shift };
 
   const companyParts = shiftIndex > 1
@@ -57,17 +59,14 @@ export function parseTimesheetParts(value) {
   };
 }
 
-export function inferShiftLabelFromStart(start) {
-  if (!start) return "";
-  return start.getHours() < 12 ? "早班" : "晚班";
-}
-
 export function matchesShiftFilter(shiftLabel, filter) {
   if (!filter || filter === "all") return true;
-  const normalized = normalizeShiftLabel(shiftLabel);
+  const normalized = normalizeShiftLabel(shiftLabel) || "未知";
   if (filter === "early") return normalized === "早班";
+  if (filter === "mid") return normalized === "午班";
   if (filter === "late") return normalized === "晚班";
-  return true;
+  if (filter === "unknown") return normalized === "未知";
+  return false;
 }
 
 export function addUnmatched(map, person, workDate, count) {
@@ -214,15 +213,17 @@ export function formatRegionName(value) {
 
 export function formatShiftFilter(value) {
   if (value === "early") return "早班";
+  if (value === "mid") return "午班";
   if (value === "late") return "晚班";
+  if (value === "unknown") return "未知";
   return "全部";
 }
 
-export function formatPersonTimeRanges(dayRanges) {
+export function formatPersonTimeRanges(dayRanges, showDate = false) {
   const sorted = [...dayRanges].sort((a, b) => a.day.localeCompare(b.day));
   return sorted.flatMap((item) => item.ranges.map((range) => {
     const rangeText = formatRange(range.start, range.end, item.day);
-    return sorted.length > 1 ? `${item.day.slice(5)}  ${rangeText}` : rangeText;
+    return showDate || sorted.length > 1 ? `${item.day}  ${rangeText}` : rangeText;
   })).join("\n");
 }
 

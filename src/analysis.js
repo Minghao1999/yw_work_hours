@@ -1,6 +1,6 @@
-import { HOUR_MS } from './config.js?v=20260910-39';
-import { clean, normalize, formatDuration, parseAnyDate, parseClockOnDate, parseDurationHours, inferShiftLabelFromStart, matchesShiftFilter, addUnmatched, addPunchCount, extractPunches, extractPunchesFromColumns, parseDateOnly, dateKey, shiftDateKey, formatPersonTimeRanges } from './utils.js?v=20260910-39';
-import { getRowRegion, getRowCompany, getRowTimesheetParts } from './parser.js?v=20260910-39';
+import { HOUR_MS } from './config.js?v=20260911-46';
+import { clean, normalize, normalizeShiftLabel, formatDuration, parseAnyDate, parseClockOnDate, parseDurationHours, matchesShiftFilter, addUnmatched, addPunchCount, extractPunches, extractPunchesFromColumns, parseDateOnly, dateKey, shiftDateKey, formatPersonTimeRanges } from './utils.js?v=20260911-46';
+import { getRowRegion, getRowCompany, getRowTimesheetParts } from './parser.js?v=20260911-46';
 
 export function analyzeRows(rows, columns, filters, startDate, endDate) {
   const timeColumns = Array.isArray(columns.timeColumns) ? columns.timeColumns : [];
@@ -111,14 +111,14 @@ export function analyzeRows(rows, columns, filters, startDate, endDate) {
     const breakHours = shift.sourceType === "paper" ? Math.max(0, shift.breakHours || 0) : 0;
     const hours = Math.max(0, grossHours - breakHours);
     if (!Number.isFinite(hours) || hours <= 0 || hours > 18) return;
-    const shiftLabel = shift.shiftLabel || inferShiftLabelFromStart(shift.start);
+    const shiftLabel = normalizeShiftLabel(shift.shiftLabel) || "未知";
     if (!matchesShiftFilter(shiftLabel, shiftNeedle)) return;
     const key = `${shift.person}__${workDate}`;
     const current = byPersonDay.get(key) || { person: shift.person, day: workDate, totalHours: 0, breakHours: 0, sourceType: shift.sourceType || "machine", segmentCount: 0, shiftLabels: new Set(), timeRanges: [] };
     current.totalHours += hours;
     current.breakHours += breakHours;
     current.segmentCount += 1;
-    if (shiftLabel) current.shiftLabels.add(shiftLabel);
+    current.shiftLabels.add(shiftLabel);
     current.timeRanges.push({ start: shift.start, end: endTime });
     byPersonDay.set(key, current);
   });
@@ -126,12 +126,12 @@ export function analyzeRows(rows, columns, filters, startDate, endDate) {
   durationEntries.forEach((entry) => {
     const dateForFilter = parseDateOnly(entry.workDate);
     if (dateForFilter < start || dateForFilter > end) return;
-    const shiftLabel = entry.shiftLabel || "";
+    const shiftLabel = normalizeShiftLabel(entry.shiftLabel) || "未知";
     if (!matchesShiftFilter(shiftLabel, shiftNeedle)) return;
     const key = `${entry.person}__${entry.workDate}`;
     if (byPersonDay.has(key)) return;
     const current = { person: entry.person, day: entry.workDate, totalHours: entry.hours, breakHours: 0, sourceType: entry.sourceType || "machine", segmentCount: 1, shiftLabels: new Set(), timeRanges: [], durationOnly: true };
-    if (shiftLabel) current.shiftLabels.add(shiftLabel);
+    current.shiftLabels.add(shiftLabel);
     byPersonDay.set(key, current);
   });
 
@@ -190,7 +190,7 @@ export function analyzeRows(rows, columns, filters, startDate, endDate) {
     .map((person) => ({
       ...person,
       shiftText: [...person.shiftLabels].join("+"),
-      timeText: formatPersonTimeRanges(person.timeRanges),
+      timeText: formatPersonTimeRanges(person.timeRanges, startDate !== endDate),
       days: person.days.sort(),
     }))
     .sort((a, b) => b.totalHours - a.totalHours);

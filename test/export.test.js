@@ -23,6 +23,26 @@ test("full report includes all regions, region-company pairs, and one people tab
   assert.deepEqual(report.peopleByRegion[0].people.map((item) => `${item.company}-${item.person}`), ["alpha-Ana", "beta-Ben"]);
 });
 
+test("full report uses the same fallback company as the dashboard", () => {
+  const rows = [
+    { 姓名: "ATL User", 日期: "2026-09-10", 地区: "ATL", 劳务公司: "", 总时长: "08:30:00" },
+  ];
+  const columns = { person: "姓名", date: "日期", region: "地区", company: "劳务公司", totalDuration: "总时长", timeColumns: [] };
+  const report = buildFullReport(rows, columns, {
+    regions: ["ATL"],
+    fallbackRegion: "ATL",
+    fallbackCompany: "MI",
+    startDate: "2026-09-10",
+    endDate: "2026-09-10",
+  });
+
+  assert.equal(report.companySummaries.length, 1);
+  assert.equal(report.companySummaries[0].company, "MI");
+  assert.equal(report.companySummaries[0].totalWork, 8.5);
+  assert.equal(report.companySummaries[0].peopleCount, 1);
+  assert.equal(report.peopleByRegion[0].people[0].company, "MI");
+});
+
 test("people table exports paper break time and keeps machine break unavailable", () => {
   const rows = personRows("MIA", [{
     company: "ksanchez",
